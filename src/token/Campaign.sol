@@ -10,10 +10,9 @@ contract CampaignToken is ERC20 {
     USDC public usdc;
     ProjectToken public projectToken;
 
-    address public sponsor; // 项目方
-    address public appContract; // 只有app可以mint
     uint public topicId; // 关联的话题ID
-    uint256 public jackpot; // 奖金，美元计价
+    uint256 public jackpotStart; // 奖金开始值，美元计价
+    uint256 public jackpotRealTime; // 奖金实时值，美元计价
     uint256 public minJackpot = 1000 * 1e6; // 1000美元
     uint256 public minDuration = 1 days; // 1天
 
@@ -23,76 +22,120 @@ contract CampaignToken is ERC20 {
     bool public isActive = false;
     bool public initialized = false;
 
+    // 活动进行中计算奖励，为了避免小数，会乘以1e6，到js中再除以1e6
+    uint256 public usdcPerMillionCPToken;
+    uint256 public ptokenPerMillionCPToken;
+
+    // 活动结束后计算奖励
+    uint256 public usdcPerMillionCPTokenFinal;
+    uint256 public ptokenPerMillionCPTokenFinal;
+
+    // ERC20名称和符号的存储
+    string private _name;
+    string private _symbol;
+
     // 空构造函数，用于最小代理
     constructor() ERC20("", "") {}
     
+    // 重写name和symbol函数
+    function name() public view virtual override returns (string memory) {
+        return _name;
+    }
+    
+    function symbol() public view virtual override returns (string memory) {
+        return _symbol;
+    }
+    
     // 初始化函数，替代构造函数
     function initialize(
-        string memory _name,
-        string memory _symbol, 
-        address _sponsor,
-        address _appContract,
-        uint _topicId
+        string memory _tokenName,
+        string memory _tokenSymbol, 
+        uint _topicId,
+        address _usdc,
+        address _projectToken
     ) external {
-        require(!initialized, "Already initialized");
-        
+        require(!initialized, "Already initialized");       
         // 设置ERC20信息
-        _name = _name;
-        _symbol = _symbol;
-        
-        sponsor = _sponsor;
-        appContract = _appContract;
+        _name = _tokenName;
+        _symbol = _tokenSymbol;       
         topicId = _topicId;
+        usdc = USDC(_usdc);
+        projectToken = ProjectToken(_projectToken);
         initialized = true;
     }
     
-    modifier onlyApp() {
-        require(msg.sender == appContract, "Only app can mint");
-        _;
-    }
-    
-    // mint函数，只有app可以调用
-    function mint(address to, uint256 amount) external onlyApp {
+    // mint函数
+    function mint(address to, uint256 amount) public {
         _mint(to, amount);
     }
 
+    // 销毁函数
+    function burn(address from, uint256 amount) public {
+        _burn(from, amount);
+    }
+
     // 活动开始
-    function start(uint256 duration) public {
+    function start(uint256 _endTime) public {
         // 需要注资USDC或者1.5倍于奖金美元价值的项目方token
         uint256 usdcInUSD = usdc.balanceOf(msg.sender);
         uint256 projectTokenInUSD = projectToken.balanceOf(msg.sender) * projectToken.price();
-        require(usdcInUSD >= jackpot || projectTokenInUSD >= jackpot * 15 / 10, "Insufficient balance");
-        // 活动时长不能小于最小时长1天
-        require(duration >= minDuration, "Duration must be greater than or equal to minDuration");
+        require(usdcInUSD + projectTokenInUSD >= minJackpot * 15 / 10, "Insufficient balance");
+
+        // 1. 记录开始时的奖金值
+        jackpotStart = usdcInUSD + projectTokenInUSD; // 记录开始时的奖金值
+        // 2. 记录开始时间
         startTime = block.timestamp;
-        endTime = startTime + duration;
+        // 3. 记录结束时间
+        endTime = _endTime;
+        // 活动时长不能小于最小时长1天
+        require(endTime - startTime >= minDuration, "Duration must be greater than or 1 day");
+        // 4. 激活活动
         isActive = true;
+    }
+
+    // 活进行中模拟结算，或者结束时候真实结算
+    function updateReward() public returns(uint256, uint256, uint256) {
+        // 计算每个CP token的奖励
+        // decimal 18 的 USDC / decimal 18 的 CP token = 1 USDC / CP token
+        usdcPerMillionCPToken = 1e6 * usdc.balanceOf(address(this)) / totalSupply();
+        ptokenPerMillionCPToken = 1e6 * projectToken.balanceOf(address(this)) / totalSupply();
+
+        // 计算实时奖金
+        uint256 usdcInUSD = usdc.balanceOf(msg.sender);
+        uint256 projectTokenInUSD = projectToken.balanceOf(msg.sender) * projectToken.price();
+        jackpotRealTime = usdcInUSD + projectTokenInUSD;
+
+        return (usdcPerMillionCPToken, ptokenPerMillionCPToken, jackpotRealTime);
     }
 
     // 活动结束方式一：到期
     function finish() public {
         require(block.timestamp >= endTime, "Campaign is not finished");
         isActive = false;
+        (usdcPerMillionCPTokenFinal, ptokenPerMillionCPTokenFinal, jackpotRealTime) = updateReward();
     }
 
-    // 活动结合方式二：项目方代币价值跌至1.1倍的原来承诺的奖金价值
+    // 活动结束方式二：项目方代币价值跌至1.1倍的原来承诺的奖金价值
     function finishByLowProjectTokenPrice() public {
         uint256 currentProjectTokenPrice = projectToken.price();
-        uint256 targetProjectTokenPrice = jackpot * 11 / 10;
-        require(currentProjectTokenPrice <= targetProjectTokenPrice, "Project token price is not low enough");
+        uint256 forceLiquidationTokenPrice = jackpotStart * 11 / 10;
+        require(currentProjectTokenPrice <= forceLiquidationTokenPrice, "Project token price is not low enough to force liquidation");
         isActive = false;
+        (usdcPerMillionCPTokenFinal, ptokenPerMillionCPTokenFinal, jackpotRealTime) = updateReward();
     }
 
-    // 活动结束后持有项目方token的参与者，可以获得奖金
+    // 活动结束后：持有项目方token的参与者，可以获得奖金
     function claim() public {
         require(isActive == false, "Campaign is not active");
-        require(projectToken.balanceOf(msg.sender) > 0, "You don't have any project token");
-        // 按照比例来分USDC和项目方token
-        uint usdcPerCPToken = usdc.balanceOf(address(this)) / totalSupply();
-        uint ptokenPerCPToken = projectToken.balanceOf(address(this)) / totalSupply();
-        uint usdcToClaim = usdcPerCPToken * projectToken.balanceOf(msg.sender);
-        uint ptokenToClaim = ptokenPerCPToken * projectToken.balanceOf(msg.sender);
+        require(balanceOf(msg.sender) > 0, "You don't have any campaign token left");
+
+        // 按照比例来分USDC和项目方token，发放的时候除去1e6
+        uint256 usdcToClaim = usdcPerMillionCPTokenFinal * balanceOf(msg.sender) / 1e6;
+        uint256 ptokenToClaim = ptokenPerMillionCPTokenFinal * balanceOf(msg.sender) / 1e6;
         usdc.transfer(msg.sender, usdcToClaim);
         projectToken.transfer(msg.sender, ptokenToClaim);
+
+        // 清空这个用户的项目方token
+        burn(msg.sender, balanceOf(msg.sender));
     }
 }

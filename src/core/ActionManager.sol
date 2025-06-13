@@ -15,13 +15,13 @@ contract ActionManager {
     
     mapping(uint => Comment) public comments; // commentId => Comment
     mapping(uint => uint[]) public topicComments; // topicId => commentId[]
-    
+
     // 用户行为记录
     mapping(uint => mapping(address => bool)) public hasCommented; // topicId => user => bool
     mapping(uint => mapping(address => bool)) public hasLikedComment; // commentId => user => bool
 
     // 添加评论
-    function _addComment(uint _topicId, address _user, string memory _content) internal returns (uint) {
+    function _addComment(uint _topicId, address _user, string memory _content) public returns (uint) {
         require(!hasCommented[_topicId][_user], "Already commented");
         
         hasCommented[_topicId][_user] = true;
@@ -44,37 +44,46 @@ contract ActionManager {
     }
     
     // 给评论点赞
-    function _likeComment(uint _commentId, address _user) internal {
+    function _likeComment(uint _commentId, address _user) public {
         require(_commentId < nextCommentId, "Comment does not exist");
         require(!hasLikedComment[_commentId][_user], "Already liked this comment");
         
         hasLikedComment[_commentId][_user] = true;
         comments[_commentId].likeCount++;
     }
-    
+
+    // 取消点赞
+    function _unlikeComment(uint _commentId, address _user) public {
+        require(_commentId < nextCommentId, "Comment does not exist");
+        require(hasLikedComment[_commentId][_user], "Can't cancel like this comment");
+        
+        hasLikedComment[_commentId][_user] = false;
+        comments[_commentId].likeCount--;
+    }
+
     // 获取评论的话题ID
-    function _getCommentTopicId(uint _commentId) internal view returns (uint) {
+    function _getCommentTopicId(uint _commentId) public view returns (uint) {
         require(_commentId < nextCommentId, "Comment does not exist");
         return comments[_commentId].topicId;
     }
     
     // 获取用户评论状态
-    function _hasUserCommented(uint _topicId, address _user) internal view returns (bool) {
+    function _hasUserCommented(uint _topicId, address _user) public view returns (bool) {
         return hasCommented[_topicId][_user];
     }
     
     // 获取用户是否给评论点赞
-    function _hasUserLikedComment(uint _commentId, address _user) internal view returns (bool) {
+    function _hasUserLikedComment(uint _commentId, address _user) public view returns (bool) {
         return hasLikedComment[_commentId][_user];
     }
     
     // 获取话题的评论列表
-    function _getTopicComments(uint _topicId) internal view returns (uint[] memory) {
+    function _getTopicComments(uint _topicId) public view returns (uint[] memory) {
         return topicComments[_topicId];
     }
     
     // 获取评论详情
-    function _getComment(uint _commentId) internal view returns (Comment memory) {
+    function _getComment(uint _commentId) public view returns (Comment memory) {
         return comments[_commentId];
     }
 } 

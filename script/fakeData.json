@@ -1,0 +1,238 @@
+{
+  "users": [
+    {
+      "address": "0x1234567890123456789012345678901234567890",
+      "name": "Alice",
+      "bio": "区块链爱好者",
+      "email": "alice@example.com",
+      "role": "user"
+    },
+    {
+      "address": "0x2345678901234567890123456789012345678901",
+      "name": "Bob",
+      "bio": "加密货币交易员",
+      "email": "bob@example.com",
+      "role": "user"
+    },
+    {
+      "address": "0x3456789012345678901234567890123456789012",
+      "name": "Charlie",
+      "bio": "DeFi开发者",
+      "email": "charlie@example.com",
+      "role": "user"
+    },
+    {
+      "address": "0x4567890123456789012345678901234567890123",
+      "name": "Diana",
+      "bio": "NFT收藏家",
+      "email": "diana@example.com",
+      "role": "user"
+    },
+    {
+      "address": "0x5678901234567890123456789012345678901234",
+      "name": "Eve",
+      "bio": "Web3研究员",
+      "email": "eve@example.com",
+      "role": "user"
+    },
+    {
+      "address": "0x6789012345678901234567890123456789012345",
+      "name": "BitcoinSponsor",
+      "bio": "Bitcoin投资机构",
+      "email": "sponsor@bitcoin.com",
+      "role": "sponsor"
+    },
+    {
+      "address": "0x7890123456789012345678901234567890123456",
+      "name": "EthereumSponsor",
+      "bio": "Ethereum基金会",
+      "email": "sponsor@ethereum.org",
+      "role": "sponsor"
+    },
+    {
+      "address": "0x8901234567890123456789012345678901234567890",
+      "name": "Admin",
+      "bio": "系统管理员",
+      "email": "admin@coinreal.com",
+      "role": "admin"
+    }
+  ],
+  "topics": [
+    {
+      "name": "Bitcoin",
+      "description": "比特币相关讨论",
+      "tokenAddress": "0xBTC1234567890123456789012345678901234567890",
+      "tokenPrice": 67000
+    },
+    {
+      "name": "Ethereum",
+      "description": "以太坊生态讨论",
+      "tokenAddress": "0xETH1234567890123456789012345678901234567890", 
+      "tokenPrice": 3500
+    },
+    {
+      "name": "Solana",
+      "description": "Solana网络相关内容",
+      "tokenAddress": "0xSOL1234567890123456789012345678901234567890",
+      "tokenPrice": 150
+    },
+    {
+      "name": "Doge",
+      "description": "狗狗币社区",
+      "tokenAddress": "0xDOGE123456789012345678901234567890123456790",
+      "tokenPrice": 1
+    },
+    {
+      "name": "XRP",
+      "description": "Ripple和XRP讨论",
+      "tokenAddress": "0xXRP1234567890123456789012345678901234567890",
+      "tokenPrice": 1
+    }
+  ],
+  "campaigns": [
+    {
+      "sponsorAddress": "0x6789012345678901234567890123456789012345",
+      "topicId": 0,
+      "name": "Bitcoin牛市预测活动",
+      "description": "预测比特币能否突破10万美元"
+    },
+    {
+      "sponsorAddress": "0x7890123456789012345678901234567890123456", 
+      "topicId": 1,
+      "name": "以太坊2.0升级讨论",
+      "description": "讨论以太坊2.0升级对生态的影响"
+    }
+  ],
+  "interactions": [
+    {
+      "userAddress": "0x1234567890123456789012345678901234567890",
+      "action": "comment",
+      "topicId": 0,
+      "content": "我认为比特币会在年底突破10万美元！"
+    },
+    {
+      "userAddress": "0x2345678901234567890123456789012345678901",
+      "action": "comment", 
+      "topicId": 0,
+      "content": "现在的市场情况确实看涨，但也要注意风险。"
+    },
+    {
+      "userAddress": "0x3456789012345678901234567890123456789012",
+      "action": "comment",
+      "topicId": 1,
+      "content": "以太坊2.0的PoS机制更加环保，值得期待。"
+    },
+    {
+      "userAddress": "0x4567890123456789012345678901234567890123",
+      "action": "comment",
+      "topicId": 1,
+      "content": "质押奖励机制会吸引更多长期投资者。"
+    },
+    {
+      "userAddress": "0x5678901234567890123456789012345678901234",
+      "action": "comment",
+      "topicId": 2,
+      "content": "Solana的TPS确实很高，但网络稳定性还需要观察。"
+    },
+    {
+      "userAddress": "0x1234567890123456789012345678901234567890",
+      "action": "comment",
+      "topicId": 2,
+      "content": "Solana的生态发展很迅速，DeFi项目质量越来越高。"
+    },
+    {
+      "userAddress": "0x2345678901234567890123456789012345678901",
+      "action": "comment",
+      "topicId": 3,
+      "content": "DOGE虽然是meme币，但社区力量不容小觑。"
+    },
+    {
+      "userAddress": "0x3456789012345678901234567890123456789012",
+      "action": "comment",
+      "topicId": 3,
+      "content": "马斯克的支持让DOGE有了更多应用场景。"
+    },
+    {
+      "userAddress": "0x4567890123456789012345678901234567890123",
+      "action": "comment",
+      "topicId": 4,
+      "content": "XRP在跨境支付领域有独特优势。"
+    },
+    {
+      "userAddress": "0x5678901234567890123456789012345678901234",
+      "action": "comment",
+      "topicId": 4,
+      "content": "Ripple与SEC的官司结果对XRP影响巨大。"
+    },
+    {
+      "userAddress": "0x2345678901234567890123456789012345678901",
+      "action": "like",
+      "commentId": 0
+    },
+    {
+      "userAddress": "0x3456789012345678901234567890123456789012",
+      "action": "like",
+      "commentId": 0
+    },
+    {
+      "userAddress": "0x4567890123456789012345678901234567890123",
+      "action": "like",
+      "commentId": 0
+    },
+    {
+      "userAddress": "0x1234567890123456789012345678901234567890",
+      "action": "like",
+      "commentId": 1
+    },
+    {
+      "userAddress": "0x5678901234567890123456789012345678901234",
+      "action": "like",
+      "commentId": 1
+    },
+    {
+      "userAddress": "0x1234567890123456789012345678901234567890",
+      "action": "like",
+      "commentId": 2
+    },
+    {
+      "userAddress": "0x2345678901234567890123456789012345678901",
+      "action": "like",
+      "commentId": 2
+    },
+    {
+      "userAddress": "0x5678901234567890123456789012345678901234",
+      "action": "like",
+      "commentId": 3
+    },
+    {
+      "userAddress": "0x1234567890123456789012345678901234567890",
+      "action": "like",
+      "commentId": 4
+    },
+    {
+      "userAddress": "0x3456789012345678901234567890123456789012",
+      "action": "like",
+      "commentId": 5
+    },
+    {
+      "userAddress": "0x4567890123456789012345678901234567890123",
+      "action": "like",
+      "commentId": 6
+    },
+    {
+      "userAddress": "0x5678901234567890123456789012345678901234",
+      "action": "like",
+      "commentId": 7
+    },
+    {
+      "userAddress": "0x1234567890123456789012345678901234567890",
+      "action": "like",
+      "commentId": 8
+    },
+    {
+      "userAddress": "0x2345678901234567890123456789012345678901",
+      "action": "like",
+      "commentId": 9
+    }
+  ]
+}
