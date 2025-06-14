@@ -19,4 +19,9 @@ contract ProjectToken is ERC20 {
         require(msg.sender == deployer, "Only deployer can set price");
         price = _price;
     }
+
+    // 获取项目方token的美元价格
+    function getPrice() public view returns (uint256) {
+        return price;
+    }
 }

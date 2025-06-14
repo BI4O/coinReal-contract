@@ -5,6 +5,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {USDC} from "./USDC.sol";
 import {ProjectToken} from "./ProjectToken.sol";
 
+
+// 活动代币，同时也是sponsor注资代币的所在合约
 contract CampaignToken is ERC20 {
     // 计价的USDC和项目方token
     USDC public usdc;
@@ -45,22 +47,25 @@ contract CampaignToken is ERC20 {
     function symbol() public view virtual override returns (string memory) {
         return _symbol;
     }
+
+    // 工厂合约会做的初始化
+    function setUSDC(address _usdcAddr) public {
+        usdc = USDC(_usdcAddr);
+    }
     
     // 初始化函数，替代构造函数
     function initialize(
         string memory _tokenName,
         string memory _tokenSymbol, 
         uint _topicId,
-        address _usdc,
-        address _projectToken
+        address _projectTokenAddr
     ) external {
         require(!initialized, "Already initialized");       
         // 设置ERC20信息
         _name = _tokenName;
         _symbol = _tokenSymbol;       
         topicId = _topicId;
-        usdc = USDC(_usdc);
-        projectToken = ProjectToken(_projectToken);
+        projectToken = ProjectToken(_projectTokenAddr);
         initialized = true;
     }
     
@@ -74,15 +79,25 @@ contract CampaignToken is ERC20 {
         _burn(from, amount);
     }
 
-    // 活动开始
-    function start(uint256 _endTime) public {
-        // 需要注资USDC或者1.5倍于奖金美元价值的项目方token
-        uint256 usdcInUSD = usdc.balanceOf(msg.sender);
-        uint256 projectTokenInUSD = projectToken.balanceOf(msg.sender) * projectToken.price();
-        require(usdcInUSD + projectTokenInUSD >= minJackpot * 15 / 10, "Insufficient balance");
+    // 查看注资的USDC数量
+    function getFundedUSDC() public view returns(uint256) {
+        return usdc.balanceOf(address(this));
+    }
 
+    // 查看注资的项目代币数量
+    function getFundedProjectToken() public view returns(uint256) {
+        return projectToken.balanceOf(address(this));
+    }
+
+    // 查看注资的总价值，美元计价
+    function getTotalFundedInUSD() public view returns(uint256) {
+        return getFundedUSDC() + getFundedProjectToken() * projectToken.getPrice();
+    }
+
+    // 活动开始，注意需要先注资
+    function start(uint256 _endTime) public {
         // 1. 记录开始时的奖金值
-        jackpotStart = usdcInUSD + projectTokenInUSD; // 记录开始时的奖金值
+        jackpotStart = getTotalFundedInUSD();
         // 2. 记录开始时间
         startTime = block.timestamp;
         // 3. 记录结束时间
@@ -94,34 +109,40 @@ contract CampaignToken is ERC20 {
     }
 
     // 活进行中模拟结算，或者结束时候真实结算
-    function updateReward() public returns(uint256, uint256, uint256) {
+    // 因为活动中途项目方可以随时注资，所以需要实时计算奖励
+    function updateJackpot() public returns(uint256, uint256, uint256) {
         // 计算每个CP token的奖励
         // decimal 18 的 USDC / decimal 18 的 CP token = 1 USDC / CP token
-        usdcPerMillionCPToken = 1e6 * usdc.balanceOf(address(this)) / totalSupply();
-        ptokenPerMillionCPToken = 1e6 * projectToken.balanceOf(address(this)) / totalSupply();
+        usdcPerMillionCPToken = 1e6 * getFundedUSDC() / totalSupply();
+        ptokenPerMillionCPToken = 1e6 * getFundedProjectToken() / totalSupply();
 
         // 计算实时奖金
-        uint256 usdcInUSD = usdc.balanceOf(msg.sender);
-        uint256 projectTokenInUSD = projectToken.balanceOf(msg.sender) * projectToken.price();
-        jackpotRealTime = usdcInUSD + projectTokenInUSD;
+        jackpotRealTime = getTotalFundedInUSD();
 
         return (usdcPerMillionCPToken, ptokenPerMillionCPToken, jackpotRealTime);
     }
 
     // 活动结束方式一：到期
-    function finish() public {
-        require(block.timestamp >= endTime, "Campaign is not finished");
-        isActive = false;
-        (usdcPerMillionCPTokenFinal, ptokenPerMillionCPTokenFinal, jackpotRealTime) = updateReward();
+    function finish() public returns(bool) {
+        if (block.timestamp >= endTime) {
+            isActive = false;
+            (usdcPerMillionCPTokenFinal, ptokenPerMillionCPTokenFinal, jackpotRealTime) = updateJackpot();
+            return true;
+        } else {
+            return false;
+        }
     }
 
-    // 活动结束方式二：项目方代币价值跌至1.1倍的原来承诺的奖金价值
-    function finishByLowProjectTokenPrice() public {
-        uint256 currentProjectTokenPrice = projectToken.price();
-        uint256 forceLiquidationTokenPrice = jackpotStart * 11 / 10;
-        require(currentProjectTokenPrice <= forceLiquidationTokenPrice, "Project token price is not low enough to force liquidation");
-        isActive = false;
-        (usdcPerMillionCPTokenFinal, ptokenPerMillionCPTokenFinal, jackpotRealTime) = updateReward();
+    // 活动结束方式二：总奖池价值跌至1.1倍的原来承诺的奖金价值
+    function finishByLowTotalJackpot() public returns(bool) {
+        // 如果usdc注资额大于等于minJackpot，则不会触发这个函数
+        if (getTotalFundedInUSD() < minJackpot * 11 / 10) {
+            isActive = false;
+            (usdcPerMillionCPTokenFinal, ptokenPerMillionCPTokenFinal, jackpotRealTime) = updateJackpot();
+            return true;
+        } else {
+            return false;
+        }
     }
 
     // 活动结束后：持有项目方token的参与者，可以获得奖金
@@ -135,7 +156,7 @@ contract CampaignToken is ERC20 {
         usdc.transfer(msg.sender, usdcToClaim);
         projectToken.transfer(msg.sender, ptokenToClaim);
 
-        // 清空这个用户的项目方token
+        // 清空这个用户的CP token
         burn(msg.sender, balanceOf(msg.sender));
     }
 }

@@ -12,7 +12,9 @@ pragma solidity ^0.8.20;
 7. 话题点赞数
 */
 
-contract TopicBaseManager {
+// 单个话题的管理器
+contract TopicItem {
+
     // 话题/栏目
     uint public nextTopicId;
     struct Topic {
@@ -31,7 +33,7 @@ contract TopicBaseManager {
     mapping(string => Topic) public topicsByTokenAddress;
 
     // 增：话题注册，管理员才可以注册
-    function _registerTopic(
+    function registerTopic(
         string memory _name, 
         string memory _description, 
         string memory _tokenAddress,
@@ -54,12 +56,12 @@ contract TopicBaseManager {
     }
 
     // 查：根据id获取话题
-    function _getTopic(uint _topicId) public view returns (Topic memory) {
+    function getTopic(uint _topicId) public view returns (Topic memory) {
         return topics[_topicId];
     }
 
     // 查：根据tokenAddress获取话题
-    function _getTopicByTokenAddress(string memory _tokenAddress) public view returns (Topic memory) {
+    function getTopicByTokenAddress(string memory _tokenAddress) public view returns (Topic memory) {
         return topicsByTokenAddress[_tokenAddress];
     }
 
@@ -73,14 +75,14 @@ contract TopicBaseManager {
     }
 
     // 改：手动更新话题的token价格
-    function _updateTopicTokenPrice(uint _topicId, uint _tokenPrice) public {
+    function updateTopicTokenPrice(uint _topicId, uint _tokenPrice) public {
         // 如果已经删除了，则name为空，不允许更新价格
         require(bytes(topics[_topicId].name).length > 0, "Topic not exist");
         topics[_topicId].tokenPrice = _tokenPrice;
     }
     
     // 改：自动更新话题的token价格 TODO chainlink-datafeed
-    function _updateTopicTokenPriceAuto(uint _topicId) public {
+    function updateTopicTokenPriceAuto(uint _topicId) public {
         // 如果已经删除了，则name为空，不允许更新价格
         require(bytes(topics[_topicId].name).length > 0, "Topic not exist");
 
@@ -93,7 +95,7 @@ contract TopicBaseManager {
     }
 
     // 删：删除话题
-    function _deleteTopic(uint _topicId) public {
+    function deleteTopicToken(uint _topicId) public {
         delete topicsByTokenAddress[topics[_topicId].tokenAddress];
         delete topics[_topicId];        
     }

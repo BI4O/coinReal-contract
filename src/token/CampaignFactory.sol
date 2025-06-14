@@ -7,26 +7,34 @@ import {CampaignToken} from "./Campaign.sol";
 contract CampaignFactory {
     address public campaignTokenImplementation;
     address public usdc;
-    address public projectToken;
     
-    constructor(address _usdc, address _projectToken) {
+    constructor(address _usdc) {
         // 部署campaign token模板
         campaignTokenImplementation = address(new CampaignToken());
         usdc = _usdc;
-        projectToken = _projectToken;
     }
     
     // 创建新的campaign token实例
     function createCampaignToken(
         string memory _name,
         string memory _symbol,
-        uint _topicId
+        uint _topicId,
+        address _projectTokenAddr
     ) external returns (address) {
         // 使用最小代理创建campaign token
         address campaignClone = Clones.clone(campaignTokenImplementation);
         
         // 初始化clone
-        CampaignToken(campaignClone).initialize(_name, _symbol, _topicId, usdc, projectToken);
+        CampaignToken c = CampaignToken(campaignClone);
+        c.initialize(
+            _name, 
+            _symbol, 
+            _topicId, 
+            _projectTokenAddr
+        );
+
+        // 设置USDC
+        c.setUSDC(usdc);
         
         return campaignClone;
     }

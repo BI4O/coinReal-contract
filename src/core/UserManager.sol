@@ -11,6 +11,9 @@ pragma solidity ^0.8.20;
 */
 
 contract UserManager {
+
+    address public owner;
+
     // 用户，不需要排序
     uint public nextUserId;
     struct User {
@@ -23,8 +26,17 @@ contract UserManager {
     mapping(address => User) public users;
     mapping(uint => address) public usersById;
 
+    // 构造函数
+    constructor() {
+        owner = msg.sender;
+    }
+    function setOwner(address _owner) public {
+        require(msg.sender == owner, "Only owner can call this function");
+        owner = _owner;
+    }
+
     // 增：用户注册
-    function _registerUser(
+    function registerUser(
         address _user,
         string memory _name, 
         string memory _bio, 
@@ -44,7 +56,7 @@ contract UserManager {
     }
 
     // 改：用户更新
-    function _updateUser(
+    function updateUser(
         address _user,
         string memory _name, 
         string memory _bio, 
@@ -63,17 +75,17 @@ contract UserManager {
     }   
 
     // 查：用户查询，只能通过地址查询
-    function _getUser(address _user) public view returns (User memory) {
+    function getUserInfo(address _user) public view returns (User memory) {
         return users[_user];
     }
 
     // 查：用户查询，通过id查询
-    function _getUserById(uint _id) public view returns (User memory) {
+    function getUserInfoById(uint _id) public view returns (User memory) {
         return users[usersById[_id]];
     }
 
     // 删：删除用户
-    function _deleteUser(address _user) public {
+    function deleteUser(address _user) public {
         delete users[_user];
         delete usersById[users[_user].id];
     }
