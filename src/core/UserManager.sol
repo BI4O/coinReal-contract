@@ -31,6 +31,7 @@ contract UserManager {
         string memory _email
     ) public {
         require(!users[_user].registered, "User already registered");
+        require(bytes(_name).length > 0, "Name is required");
         users[_user] = User({
             id: nextUserId,
             name: _name,
