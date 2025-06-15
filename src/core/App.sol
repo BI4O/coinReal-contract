@@ -72,12 +72,19 @@ contract App {
 
     // 活动注资
     function fundCampaignWithUSDC(uint _campaignId, uint _amount) public {
-        topicManager.fundCampaignWithUSDC(_campaignId, _amount);
+        // 获取CampaignToken地址
+        address campaignTokenAddr = topicManager.getCampaignToken(_campaignId);
+        // 直接从调用者转账USDC到CampaignToken合约
+        usdc.transferFrom(msg.sender, campaignTokenAddr, _amount);
     }
 
     // 活动注资
     function fundCampaignWithProjectToken(uint _campaignId, uint _amount) public {
-        topicManager.fundCampaignWithProjectToken(_campaignId, _amount);
+        // 获取CampaignToken地址和项目代币地址
+        address campaignTokenAddr = topicManager.getCampaignToken(_campaignId);
+        ProjectToken ptoken = ProjectToken(topicManager.getCampaignInfo(_campaignId).projectTokenAddr);
+        // 直接从调用者转账项目代币到CampaignToken合约
+        ptoken.transferFrom(msg.sender, campaignTokenAddr, _amount);
     }
 
     // 活动开始

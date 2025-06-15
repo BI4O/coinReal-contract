@@ -66,6 +66,9 @@ contract CampaignToken is ERC20 {
         _symbol = _tokenSymbol;       
         topicId = _topicId;
         projectToken = ProjectToken(_projectTokenAddr);
+        // 设置默认值
+        minJackpot = 1000 * 1e6; // 1000美元
+        minDuration = 1 days; // 1天
         initialized = true;
     }
     
@@ -91,7 +94,9 @@ contract CampaignToken is ERC20 {
 
     // 查看注资的总价值，美元计价
     function getTotalFundedInUSD() public view returns(uint256) {
-        return getFundedUSDC() + getFundedProjectToken() * projectToken.getPrice();
+        // USDC是6位小数，项目代币是18位小数，价格是6位小数
+        // 项目代币价值 = 项目代币数量(18位) * 价格(6位) / 1e18 = 6位小数
+        return getFundedUSDC() + getFundedProjectToken() * projectToken.getPrice() / 1e18;
     }
 
     // 活动开始，注意需要先注资
@@ -112,9 +117,17 @@ contract CampaignToken is ERC20 {
     // 因为活动中途项目方可以随时注资，所以需要实时计算奖励
     function updateJackpot() public returns(uint256, uint256, uint256) {
         // 计算每个CP token的奖励
-        // decimal 18 的 USDC / decimal 18 的 CP token = 1 USDC / CP token
-        usdcPerMillionCPToken = 1e6 * getFundedUSDC() / totalSupply();
-        ptokenPerMillionCPToken = 1e6 * getFundedProjectToken() / totalSupply();
+        // 为了避免精度问题，我们计算每百万CP token能获得多少奖励
+        if (totalSupply() > 0) {
+            // USDC是6位小数，CP token是18位小数
+            // 需要调整精度：getFundedUSDC() * 1e18 * 1e6 / totalSupply()
+            // 这样分子和分母都是相同的精度级别
+            usdcPerMillionCPToken = getFundedUSDC() * 1e18 / totalSupply();
+            ptokenPerMillionCPToken = 1e6 * getFundedProjectToken() / totalSupply();
+        } else {
+            usdcPerMillionCPToken = 0;
+            ptokenPerMillionCPToken = 0;
+        }
 
         // 计算实时奖金
         jackpotRealTime = getTotalFundedInUSD();
@@ -150,11 +163,17 @@ contract CampaignToken is ERC20 {
         require(isActive == false, "Campaign is not active");
         require(balanceOf(msg.sender) > 0, "You don't have any campaign token left");
 
-        // 按照比例来分USDC和项目方token，发放的时候除去1e6
-        uint256 usdcToClaim = usdcPerMillionCPTokenFinal * balanceOf(msg.sender) / 1e6;
+        // 按照比例来分USDC和项目方token
+        // usdcPerMillionCPTokenFinal现在表示每个CP token能获得多少USDC（已经考虑了精度）
+        uint256 usdcToClaim = usdcPerMillionCPTokenFinal * balanceOf(msg.sender) / 1e18;
         uint256 ptokenToClaim = ptokenPerMillionCPTokenFinal * balanceOf(msg.sender) / 1e6;
-        usdc.transfer(msg.sender, usdcToClaim);
-        projectToken.transfer(msg.sender, ptokenToClaim);
+        
+        if (usdcToClaim > 0) {
+            usdc.transfer(msg.sender, usdcToClaim);
+        }
+        if (ptokenToClaim > 0) {
+            projectToken.transfer(msg.sender, ptokenToClaim);
+        }
 
         // 清空这个用户的CP token
         burn(msg.sender, balanceOf(msg.sender));

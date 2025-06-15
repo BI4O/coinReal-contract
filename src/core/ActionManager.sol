@@ -69,6 +69,7 @@ contract ActionManager {
         userManager = UserManager(_userManagerAddr);
         commentRewardAmount = _commentRewardAmount;
         likeRewardAmount = _likeRewardAmount;
+        commentRewardExtraAmount = _likeRewardAmount / 2; // 设置为点赞奖励的一半
     }
 
     function setOwner(address _owner) public {

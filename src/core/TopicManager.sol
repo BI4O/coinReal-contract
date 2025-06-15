@@ -129,10 +129,19 @@ contract TopicManager is TopicItem {
         uint currentFunded = c.getFundedUSDC() + c.getFundedProjectToken() * c.projectToken().getPrice();
         // 如果是纯USDC注资，则直接返回差值
         if (c.getFundedProjectToken() == 0) {
-            return int(c.minJackpot() - currentFunded);
+            if (currentFunded >= c.minJackpot()) {
+                return 0; // 已经满足最低要求
+            } else {
+                return int(c.minJackpot() - currentFunded);
+            }
         } else {
             // 如果是掺杂了项目代币，则需要计算总奖金价值，如果小于minJackpot，则触发自动结束
-            return int(c.minJackpot() * 15 / 10 - currentFunded);
+            uint requiredAmount = c.minJackpot() * 15 / 10;
+            if (currentFunded >= requiredAmount) {
+                return 0; // 已经满足要求
+            } else {
+                return int(requiredAmount - currentFunded);
+            }
         }
     }
 
