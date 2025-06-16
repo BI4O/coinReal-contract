@@ -38,7 +38,7 @@ CoinReal是一个基于以太坊的去中心化社交活动管理平台，专门
 │   │   ├── App.sol             # 主合约 (16,785字节) ✅
 │   │   ├── UserManager.sol     # 用户管理
 │   │   ├── TopicManager.sol    # 话题与Campaign管理
-│   │   ├── TopicBaseManager.sol # 话题基础功能
+│   │   ├── TopicItem.sol       # 话题基础功能
 │   │   └── ActionManager.sol   # 用户行为管理
 │   └── token/                   # 代币相关
 │       ├── CampaignFactory.sol # Campaign工厂合约
@@ -124,23 +124,30 @@ forge test
 
 ### 用户管理
 ```solidity
-function registerUser(string memory _name, string memory _bio, string memory _email) external
-function updateUser(string memory _name, string memory _bio, string memory _email) external  
-function getUser(address _user) external view returns (User memory)
+function registerUser(address _user, string memory _name, string memory _bio, string memory _email) public
+function updateUser(address _user, string memory _name, string memory _bio, string memory _email) public
+function getUserInfo(address _user) public view returns (User memory)
 ```
 
 ### 话题管理
 ```solidity
-function registerTopic(string memory _name, string memory _description, string memory _tokenAddress, uint _tokenPrice) external
-function commentOnTopic(uint _topicId, string memory _content) external
-function likeComment(uint _commentId) external
+function registerTopic(string memory _name, string memory _description, string memory _tokenAddress, uint _tokenPrice) public
+function getTopic(uint _topicId) public view returns (Topic memory)
+function listTopics() public view returns (Topic[] memory)
 ```
 
 ### Campaign管理
 ```solidity
-function registerCampaign(address _sponsor, uint _topicId, string memory _name, string memory _description) external returns (bool, uint)
-function startCampaign(uint _campaignId, uint _duration) external
-function endCampaign(uint _campaignId) external
+function registerCampaign(address _sponsor, uint _topicId, string memory _name, string memory _description, address _projectTokenAddr) public returns (bool, uint)
+function startCampaign(uint _campaignId, uint _endTime) public
+function endCampaign(uint _campaignId) public
+```
+
+### 动作管理
+```solidity
+function addComment(uint _topicId, address _user, string memory _content) public returns(bool,uint)
+function addLike(uint _topicId, uint _commentId, address _user) public returns(bool,uint)
+function deleteComment(uint _commentId) public returns(bool)
 ```
 
 ## 合约地址（本地测试网）
