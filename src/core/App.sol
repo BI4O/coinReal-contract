@@ -139,9 +139,29 @@ contract App {
         return actionManager.getLeastLikedCommentsPaginated(startIndex, length);
     }
 
+    // 分页获取最近的评论ID（全局时间序列）
+    function getRecentCommentsPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
+        return actionManager.getRecentCommentsPaginated(startIndex, length);
+    }
+
+    // 分页获取最近的点赞ID（全局时间序列）
+    function getRecentLikesPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
+        return actionManager.getRecentLikesPaginated(startIndex, length);
+    }
+
     // 获取有效评论总数
     function getValidCommentsCount() public view returns (uint) {
         return actionManager.getValidCommentsCount();
+    }
+
+    // 获取全局评论总数（用于时间序列分页计算）
+    function getGlobalCommentsCount() public view returns (uint) {
+        return actionManager.getGlobalCommentsCount();
+    }
+
+    // 获取全局点赞总数（用于时间序列分页计算）
+    function getGlobalLikesCount() public view returns (uint) {
+        return actionManager.getGlobalLikesCount();
     }
 
     // 根据评论ID获取评论详情

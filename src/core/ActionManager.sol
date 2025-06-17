@@ -4,103 +4,8 @@ pragma solidity ^0.8.20;
 import {TopicManager} from "./TopicManager.sol";
 import {UserManager} from "./UserManager.sol";
 import {CampaignToken} from "../token/Campaign.sol";
-
-contract LinkArray {
-    // 每个链表的大小
-    mapping(address => mapping(uint => uint)) public listSize;
-    
-    // 链表头常量
-    uint constant FIRST = 1;
-    
-    // 下一个元素指针 [owner][listType][currentId] => nextId
-    mapping(address => mapping(uint => mapping(uint => uint))) private _next;
-    
-    // 链表头指针 [owner][listType] => firstId
-    mapping(address => mapping(uint => uint)) public head;
-    
-    // 元素时间戳 [owner][listType][id] => timestamp
-    mapping(address => mapping(uint => mapping(uint => uint))) public timestamps;
-    
-    // 链表类型常量
-    uint public constant COMMENT_LIST = 1;
-    uint public constant LIKE_LIST = 2;
-    
-    constructor() {
-        // 无需初始化
-    }
-    
-    // 添加元素到链表头部
-    function addItem(address owner, uint listType, uint id, uint timestamp) public {
-        // 确保ID不存在于链表中
-        require(_next[owner][listType][id] == 0, "ID already exists");
-        
-        // 添加到链表头
-        if (head[owner][listType] == 0) {
-            // 首个元素
-            head[owner][listType] = id;
-            _next[owner][listType][id] = 0;
-        } else {
-            // 添加到头部
-            _next[owner][listType][id] = head[owner][listType];
-            head[owner][listType] = id;
-        }
-        
-        // 记录时间戳
-        timestamps[owner][listType][id] = timestamp;
-        
-        // 增加链表大小
-        listSize[owner][listType]++;
-    }
-    
-    // 从链表中移除元素
-    function removeItem(address owner, uint listType, uint id, uint prevId) public {
-        require(_next[owner][listType][id] != 0, "ID does not exist");
-        
-        if (prevId == 0) {
-            // 如果是头部元素
-            require(head[owner][listType] == id, "Invalid previous ID");
-            head[owner][listType] = _next[owner][listType][id];
-        } else {
-            // 确认前一个元素正确指向当前元素
-            require(_next[owner][listType][prevId] == id, "Invalid previous ID");
-            // 更新前一个元素的指针
-            _next[owner][listType][prevId] = _next[owner][listType][id];
-        }
-        
-        // 清除当前元素
-        _next[owner][listType][id] = 0;
-        timestamps[owner][listType][id] = 0;
-        
-        // 减少链表大小
-        listSize[owner][listType]--;
-    }
-    
-    // 获取链表中的前n个元素
-    function getItems(address owner, uint listType, uint n) public view returns (uint[] memory) {
-        uint size = listSize[owner][listType];
-        uint count = n < size ? n : size;
-        
-        uint[] memory items = new uint[](count);
-        
-        uint current = head[owner][listType];
-        for (uint i = 0; i < count && current != 0; i++) {
-            items[i] = current;
-            current = _next[owner][listType][current];
-        }
-        
-        return items;
-    }
-    
-    // 检查元素是否存在
-    function contains(address owner, uint listType, uint id) public view returns (bool) {
-        return _next[owner][listType][id] != 0 || head[owner][listType] == id;
-    }
-    
-    // 获取元素的下一个元素
-    function getNext(address owner, uint listType, uint id) public view returns (uint) {
-        return _next[owner][listType][id];
-    }
-}
+import {TimeSerLinkArray} from "../utils/TimeSerLinkArray.sol";
+import {CountSerLinkArray} from "../utils/CountSerLinkArray.sol";
 
 contract ActionManager {
     address public owner;
@@ -116,10 +21,6 @@ contract ActionManager {
     uint public commentRewardAmount;
     uint public commentRewardExtraAmount;
     uint public likeRewardAmount;
-    
-    // 链表类型常量
-    uint public constant COMMENT_LIST = 1;
-    uint public constant LIKE_LIST = 2;
 
     // 评论
     struct Comment {
@@ -156,11 +57,9 @@ contract ActionManager {
     // 检验某个评论对各个活动的Token的奖励的余额 [commentId][campaignId]
     mapping(uint => mapping(uint => uint)) public commentToTokenRewardBalances;
 
-    // 记录用户所有的评论
-    mapping(address => mapping(uint => uint)) public userComments;
-
-    // 初始化LinkArray实例
-    LinkArray private linkArray;
+    // 链表实例
+    TimeSerLinkArray public timeSerLinkArray;
+    CountSerLinkArray public countSerLinkArray;
 
     // 构造函数
     constructor(
@@ -179,7 +78,8 @@ contract ActionManager {
         commentRewardExtraAmount = _likeRewardAmount / 2; // 设置为点赞奖励的一半
         
         // 初始化链表
-        linkArray = new LinkArray();
+        timeSerLinkArray = new TimeSerLinkArray();
+        countSerLinkArray = new CountSerLinkArray();
     }
 
     function setOwner(address _owner) public {
@@ -263,8 +163,11 @@ contract ActionManager {
         // 奖励代币
         commentRewardOrBurn(_topicId, nextCommentId, _user, false);
         
-        // 更新用户评论链表
-        linkArray.addItem(_user, COMMENT_LIST, nextCommentId, block.timestamp);
+        // 添加到时间序列链表（用户评论历史）
+        timeSerLinkArray.addItem(_user, timeSerLinkArray.COMMENT_LIST(), nextCommentId, block.timestamp);
+        
+        // 添加到点赞数序列链表（全局排序）
+        countSerLinkArray.addComment(nextCommentId);
 
         // 更新nextCommentId
         nextCommentId++;
@@ -309,8 +212,11 @@ contract ActionManager {
         // 奖励代币
         likeReward(_topicId, nextLikeId, _user);
         
-        // 更新用户点赞链表
-        linkArray.addItem(_user, LIKE_LIST, nextLikeId, block.timestamp);
+        // 添加到时间序列链表（用户点赞历史）
+        timeSerLinkArray.addItem(_user, timeSerLinkArray.LIKE_LIST(), nextLikeId, block.timestamp);
+        
+        // 更新点赞数序列链表中评论的位置
+        countSerLinkArray.updateLikeCount(_commentId, comments[_commentId].likeCount);
 
         // 更新nextLikeId
         nextLikeId++;
@@ -338,259 +244,59 @@ contract ActionManager {
         return comments[_commentId].tags;
     }
 
-    // 查：给定用户id，查询用户评最近n个评论的id，
+    // 查：给定用户id，查询用户最近n个评论的id
     function getRecentCommentsByUserAddress(address _userAddress, uint _n) public view returns (uint[] memory) {
-        return linkArray.getItems(_userAddress, COMMENT_LIST, _n);
+        return timeSerLinkArray.getRecentItems(_userAddress, timeSerLinkArray.COMMENT_LIST(), _n);
     }
 
-    // 查：给定用户id，查询用户评最近n个like的id，
+    // 查：给定用户id，查询用户最近n个like的id
     function getRecentLikesByUserAddress(address _userAddress, uint _n) public view returns (uint[] memory) {
-        return linkArray.getItems(_userAddress, LIKE_LIST, _n);
+        return timeSerLinkArray.getRecentItems(_userAddress, timeSerLinkArray.LIKE_LIST(), _n);
     }
 
     // 查：给定n，查最多like的n个评论
     function getMostLikedComments(uint _n) public view returns (uint[] memory) {
-        if (nextCommentId == 0 || _n == 0) {
-            return new uint[](0);
-        }
-        
-        uint actualN = _n > nextCommentId ? nextCommentId : _n;
-        uint[] memory result = new uint[](actualN);
-        uint[] memory likeCounts = new uint[](actualN);
-        
-        // 初始化结果数组
-        for (uint i = 0; i < actualN; i++) {
-            result[i] = type(uint).max; // 使用最大值作为未初始化标记
-            likeCounts[i] = 0;
-        }
-        
-        // 遍历所有评论，找到点赞数最多的n个
-        for (uint commentId = 0; commentId < nextCommentId; commentId++) {
-            // 跳过已删除的评论
-            if (comments[commentId].isDelete) continue;
-            
-            uint currentLikes = comments[commentId].likeCount;
-            
-            // 找到应该插入的位置
-            for (uint j = 0; j < actualN; j++) {
-                if (result[j] == type(uint).max || currentLikes > likeCounts[j]) {
-                    // 向后移动元素
-                    for (uint k = actualN - 1; k > j; k--) {
-                        result[k] = result[k-1];
-                        likeCounts[k] = likeCounts[k-1];
-                    }
-                    // 插入新元素
-                    result[j] = commentId;
-                    likeCounts[j] = currentLikes;
-                    break;
-                }
-            }
-        }
-        
-        // 移除未初始化的元素
-        uint validCount = 0;
-        for (uint i = 0; i < actualN; i++) {
-            if (result[i] != type(uint).max) {
-                validCount++;
-            }
-        }
-        
-        uint[] memory finalResult = new uint[](validCount);
-        for (uint i = 0; i < validCount; i++) {
-            finalResult[i] = result[i];
-        }
-        
-        return finalResult;
+        return countSerLinkArray.getMostLikedComments(_n);
     }
 
-    // 查：给定n，查最小like的n个评论
+    // 查：给定n，查最少like的n个评论
     function getLeastLikedComments(uint _n) public view returns (uint[] memory) {
-        if (nextCommentId == 0 || _n == 0) {
-            return new uint[](0);
-        }
-        
-        uint actualN = _n > nextCommentId ? nextCommentId : _n;
-        uint[] memory result = new uint[](actualN);
-        uint[] memory likeCounts = new uint[](actualN);
-        
-        // 初始化结果数组
-        for (uint i = 0; i < actualN; i++) {
-            result[i] = type(uint).max; // 使用最大值作为未初始化标记
-            likeCounts[i] = type(uint).max; // 使用最大值作为初始比较值
-        }
-        
-        // 遍历所有评论，找到点赞数最少的n个
-        for (uint commentId = 0; commentId < nextCommentId; commentId++) {
-            // 跳过已删除的评论
-            if (comments[commentId].isDelete) continue;
-            
-            uint currentLikes = comments[commentId].likeCount;
-            
-            // 找到应该插入的位置
-            for (uint j = 0; j < actualN; j++) {
-                if (result[j] == type(uint).max || currentLikes < likeCounts[j]) {
-                    // 向后移动元素
-                    for (uint k = actualN - 1; k > j; k--) {
-                        result[k] = result[k-1];
-                        likeCounts[k] = likeCounts[k-1];
-                    }
-                    // 插入新元素
-                    result[j] = commentId;
-                    likeCounts[j] = currentLikes;
-                    break;
-                }
-            }
-        }
-        
-        // 移除未初始化的元素
-        uint validCount = 0;
-        for (uint i = 0; i < actualN; i++) {
-            if (result[i] != type(uint).max) {
-                validCount++;
-            }
-        }
-        
-        uint[] memory finalResult = new uint[](validCount);
-        for (uint i = 0; i < validCount; i++) {
-            finalResult[i] = result[i];
-        }
-        
-        return finalResult;
+        return countSerLinkArray.getLeastLikedComments(_n);
     }
 
     // 查：分页获取最多点赞的评论 (startIndex: 起始索引, length: 获取数量)
     function getMostLikedCommentsPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
-        if (nextCommentId == 0 || length == 0) {
-            return new uint[](0);
-        }
-        
-        // 创建所有有效评论的数组
-        uint[] memory validComments = new uint[](nextCommentId);
-        uint[] memory likeCounts = new uint[](nextCommentId);
-        uint validCount = 0;
-        
-        // 收集所有未删除的评论
-        for (uint commentId = 0; commentId < nextCommentId; commentId++) {
-            if (!comments[commentId].isDelete) {
-                validComments[validCount] = commentId;
-                likeCounts[validCount] = comments[commentId].likeCount;
-                validCount++;
-            }
-        }
-        
-        // 如果没有有效评论
-        if (validCount == 0) {
-            return new uint[](0);
-        }
-        
-        // 使用冒泡排序按点赞数降序排列
-        for (uint i = 0; i < validCount - 1; i++) {
-            for (uint j = 0; j < validCount - i - 1; j++) {
-                if (likeCounts[j] < likeCounts[j + 1]) {
-                    // 交换点赞数
-                    uint tempLikes = likeCounts[j];
-                    likeCounts[j] = likeCounts[j + 1];
-                    likeCounts[j + 1] = tempLikes;
-                    
-                    // 交换评论ID
-                    uint tempComment = validComments[j];
-                    validComments[j] = validComments[j + 1];
-                    validComments[j + 1] = tempComment;
-                }
-            }
-        }
-        
-        // 计算分页结果
-        if (startIndex >= validCount) {
-            return new uint[](0);
-        }
-        
-        uint endIndex = startIndex + length;
-        if (endIndex > validCount) {
-            endIndex = validCount;
-        }
-        
-        uint resultLength = endIndex - startIndex;
-        uint[] memory result = new uint[](resultLength);
-        
-        for (uint i = 0; i < resultLength; i++) {
-            result[i] = validComments[startIndex + i];
-        }
-        
-        return result;
+        return countSerLinkArray.getMostLikedCommentsPaginated(startIndex, length);
     }
 
     // 查：分页获取最少点赞的评论 (startIndex: 起始索引, length: 获取数量)
     function getLeastLikedCommentsPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
-        if (nextCommentId == 0 || length == 0) {
-            return new uint[](0);
-        }
-        
-        // 创建所有有效评论的数组
-        uint[] memory validComments = new uint[](nextCommentId);
-        uint[] memory likeCounts = new uint[](nextCommentId);
-        uint validCount = 0;
-        
-        // 收集所有未删除的评论
-        for (uint commentId = 0; commentId < nextCommentId; commentId++) {
-            if (!comments[commentId].isDelete) {
-                validComments[validCount] = commentId;
-                likeCounts[validCount] = comments[commentId].likeCount;
-                validCount++;
-            }
-        }
-        
-        // 如果没有有效评论
-        if (validCount == 0) {
-            return new uint[](0);
-        }
-        
-        // 使用冒泡排序按点赞数升序排列
-        for (uint i = 0; i < validCount - 1; i++) {
-            for (uint j = 0; j < validCount - i - 1; j++) {
-                if (likeCounts[j] > likeCounts[j + 1]) {
-                    // 交换点赞数
-                    uint tempLikes = likeCounts[j];
-                    likeCounts[j] = likeCounts[j + 1];
-                    likeCounts[j + 1] = tempLikes;
-                    
-                    // 交换评论ID
-                    uint tempComment = validComments[j];
-                    validComments[j] = validComments[j + 1];
-                    validComments[j + 1] = tempComment;
-                }
-            }
-        }
-        
-        // 计算分页结果
-        if (startIndex >= validCount) {
-            return new uint[](0);
-        }
-        
-        uint endIndex = startIndex + length;
-        if (endIndex > validCount) {
-            endIndex = validCount;
-        }
-        
-        uint resultLength = endIndex - startIndex;
-        uint[] memory result = new uint[](resultLength);
-        
-        for (uint i = 0; i < resultLength; i++) {
-            result[i] = validComments[startIndex + i];
-        }
-        
-        return result;
+        return countSerLinkArray.getLeastLikedCommentsPaginated(startIndex, length);
+    }
+
+    // 查：分页取最近n条评论
+    function getRecentCommentsPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
+        return timeSerLinkArray.getRecentItemsPaginated(timeSerLinkArray.COMMENT_LIST(), startIndex, length);
+    }
+
+    // 查：分页取最近n条like
+    function getRecentLikesPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
+        return timeSerLinkArray.getRecentItemsPaginated(timeSerLinkArray.LIKE_LIST(), startIndex, length);
     }
 
     // 查：获取有效评论总数（用于分页计算）
     function getValidCommentsCount() public view returns (uint) {
-        uint count = 0;
-        for (uint commentId = 0; commentId < nextCommentId; commentId++) {
-            if (!comments[commentId].isDelete) {
-                count++;
-            }
-        }
-        return count;
+        return countSerLinkArray.getValidCommentsCount();
+    }
+
+    // 查：获取全局评论总数（用于时间序列分页计算）
+    function getGlobalCommentsCount() public view returns (uint) {
+        return timeSerLinkArray.getGlobalListSize(timeSerLinkArray.COMMENT_LIST());
+    }
+
+    // 查：获取全局点赞总数（用于时间序列分页计算）
+    function getGlobalLikesCount() public view returns (uint) {
+        return timeSerLinkArray.getGlobalListSize(timeSerLinkArray.LIKE_LIST());
     }
 
     // 删：删除评论
@@ -610,6 +316,9 @@ contract ActionManager {
 
         // 删除评论
         comments[_commentId].isDelete = true;
+        
+        // 在点赞数序列链表中标记为已删除
+        countSerLinkArray.deleteComment(_commentId);
 
         return true;
     }
@@ -631,6 +340,9 @@ contract ActionManager {
 
         // 删除评论
         comments[_commentId].isDelete = true;
+        
+        // 在点赞数序列链表中标记为已删除
+        countSerLinkArray.deleteComment(_commentId);
 
         return true;
     }

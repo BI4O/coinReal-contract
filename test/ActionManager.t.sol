@@ -375,4 +375,144 @@ contract ActionManagerTest is Test {
         assertEq(normal.length, 1);
         assertEq(normal[0], 0);
     }
+
+    function test_GetRecentCommentsPaginated() public {
+        // 创建5个评论（不同用户）
+        actionManager.addComment(0, user, "comment0");
+        actionManager.addComment(0, user2, "comment1");
+        actionManager.addComment(0, user, "comment2");
+        actionManager.addComment(0, user2, "comment3");
+        actionManager.addComment(0, user, "comment4");
+        
+        // 测试分页：获取从索引0开始的3个最近评论
+        uint[] memory page1 = actionManager.getRecentCommentsPaginated(0, 3);
+        assertEq(page1.length, 3);
+        assertEq(page1[0], 4); // 最新的评论ID
+        assertEq(page1[1], 3); // 第二新的评论ID
+        assertEq(page1[2], 2); // 第三新的评论ID
+        
+        // 测试分页：获取从索引2开始的2个最近评论
+        uint[] memory page2 = actionManager.getRecentCommentsPaginated(2, 2);
+        assertEq(page2.length, 2);
+        assertEq(page2[0], 2); // 第三新的评论ID
+        assertEq(page2[1], 1); // 第四新的评论ID
+        
+        // 测试分页：获取从索引4开始的2个评论（只有1个）
+        uint[] memory page3 = actionManager.getRecentCommentsPaginated(4, 2);
+        assertEq(page3.length, 1);
+        assertEq(page3[0], 0); // 最早的评论ID
+    }
+
+    function test_GetRecentLikesPaginated() public {
+        // 创建一些评论供点赞
+        actionManager.addComment(0, user, "comment0");
+        actionManager.addComment(0, user, "comment1");
+        actionManager.addComment(0, user, "comment2");
+        
+        // 不同用户点赞，创建5个点赞
+        actionManager.addLike(0, 0, user2);
+        address user3 = address(0x3);
+        userManager.registerUser(user3, "Charlie", "bio", "charlie@example.com");
+        actionManager.addLike(0, 1, user3);
+        actionManager.addLike(0, 2, user2);
+        actionManager.addLike(0, 0, user3);
+        address user4 = address(0x4);
+        userManager.registerUser(user4, "David", "bio", "david@example.com");
+        actionManager.addLike(0, 1, user4);
+        
+        // 测试分页：获取从索引0开始的3个最近点赞
+        uint[] memory page1 = actionManager.getRecentLikesPaginated(0, 3);
+        assertEq(page1.length, 3);
+        assertEq(page1[0], 4); // 最新的点赞ID
+        assertEq(page1[1], 3); // 第二新的点赞ID
+        assertEq(page1[2], 2); // 第三新的点赞ID
+        
+        // 测试分页：获取从索引3开始的3个点赞（只有2个）
+        uint[] memory page2 = actionManager.getRecentLikesPaginated(3, 3);
+        assertEq(page2.length, 2);
+        assertEq(page2[0], 1); // 第四新的点赞ID
+        assertEq(page2[1], 0); // 最早的点赞ID
+    }
+
+    function test_GetRecentCommentsPaginated_EmptyCase() public {
+        // 空数据情况
+        uint[] memory empty = actionManager.getRecentCommentsPaginated(0, 5);
+        assertEq(empty.length, 0);
+        
+        // 超出范围的startIndex
+        actionManager.addComment(0, user, "comment1");
+        uint[] memory outOfRange = actionManager.getRecentCommentsPaginated(5, 2);
+        assertEq(outOfRange.length, 0);
+    }
+
+    function test_GetRecentLikesPaginated_EmptyCase() public {
+        // 空数据情况
+        uint[] memory empty = actionManager.getRecentLikesPaginated(0, 5);
+        assertEq(empty.length, 0);
+        
+        // 创建评论和点赞
+        actionManager.addComment(0, user, "comment1");
+        actionManager.addLike(0, 0, user2);
+        
+        // 超出范围的startIndex
+        uint[] memory outOfRange = actionManager.getRecentLikesPaginated(5, 2);
+        assertEq(outOfRange.length, 0);
+    }
+
+    function test_GlobalCountFunctions() public {
+        // 初始状态
+        assertEq(actionManager.getGlobalCommentsCount(), 0);
+        assertEq(actionManager.getGlobalLikesCount(), 0);
+        
+        // 创建2个评论
+        actionManager.addComment(0, user, "comment1");
+        actionManager.addComment(0, user2, "comment2");
+        
+        assertEq(actionManager.getGlobalCommentsCount(), 2);
+        assertEq(actionManager.getGlobalLikesCount(), 0);
+        
+        // 创建3个点赞
+        actionManager.addLike(0, 0, user2);
+        address user3 = address(0x3);
+        userManager.registerUser(user3, "Charlie", "bio", "charlie@example.com");
+        actionManager.addLike(0, 1, user3);
+        actionManager.addLike(0, 0, user3);
+        
+        assertEq(actionManager.getGlobalCommentsCount(), 2);
+        assertEq(actionManager.getGlobalLikesCount(), 3);
+    }
+
+    function test_RecentPaginatedFunctions_MixedUsers() public {
+        // 创建混合用户的评论和点赞
+        actionManager.addComment(0, user, "user comment1");
+        actionManager.addComment(0, user2, "user2 comment1");
+        actionManager.addComment(0, user, "user comment2");
+        
+        actionManager.addLike(0, 0, user2);
+        actionManager.addLike(0, 1, user);
+        actionManager.addLike(0, 2, user2);
+        
+        // 验证全局评论分页
+        uint[] memory allComments = actionManager.getRecentCommentsPaginated(0, 10);
+        assertEq(allComments.length, 3);
+        assertEq(allComments[0], 2); // 最新评论
+        assertEq(allComments[1], 1);
+        assertEq(allComments[2], 0); // 最早评论
+        
+        // 验证全局点赞分页
+        uint[] memory allLikes = actionManager.getRecentLikesPaginated(0, 10);
+        assertEq(allLikes.length, 3);
+        assertEq(allLikes[0], 2); // 最新点赞
+        assertEq(allLikes[1], 1);
+        assertEq(allLikes[2], 0); // 最早点赞
+        
+        // 验证分页功能
+        uint[] memory partialComments = actionManager.getRecentCommentsPaginated(1, 1);
+        assertEq(partialComments.length, 1);
+        assertEq(partialComments[0], 1);
+        
+        uint[] memory partialLikes = actionManager.getRecentLikesPaginated(1, 1);
+        assertEq(partialLikes.length, 1);
+        assertEq(partialLikes[0], 1);
+    }
 } 

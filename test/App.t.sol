@@ -12,6 +12,8 @@ contract AppTest is Test {
     App app;
     USDC usdc;
     address user = address(0x1);
+    address user2 = address(0x2);
+    address user3 = address(0x3);
     address admin = address(this);
     UserManager userManager;
     TopicManager topicManager;
@@ -97,13 +99,21 @@ contract AppTest is Test {
     }
 
     function test_AttackRewardAbuse() public {
+        // 注册第二个用户
+        vm.prank(user2);
+        app.registerUser("Bob", "bio", "bob@example.com");
+        
+        // 用户发表评论
         vm.prank(user);
-        app.comment(0, "hello");
-        vm.prank(user);
+        app.comment(0, "test comment");
+        
+        // 用户尝试多次点赞同一评论（应该失败）
+        vm.prank(user2);
         app.like(0, 0);
-        vm.prank(user);
+        
+        vm.prank(user2);
         vm.expectRevert();
-        app.like(0, 0);
+        app.like(0, 0); // 重复点赞应该失败
     }
 
     // 测试新增的查询功能
@@ -305,5 +315,155 @@ contract AppTest is Test {
         vm.prank(user2);
         vm.expectRevert("You are not the author of this comment");
         app.deleteComment(0);
+    }
+
+    function test_AppGetRecentCommentsPaginated() public {
+        // 注册第二个用户
+        vm.prank(user2);
+        app.registerUser("Bob", "bio", "bob@example.com");
+        
+        // 不同用户发表评论
+        vm.prank(user);
+        app.comment(0, "comment1");
+        vm.prank(user2);
+        app.comment(0, "comment2");
+        vm.prank(user);
+        app.comment(0, "comment3");
+        
+        // 测试分页功能
+        uint[] memory page1 = app.getRecentCommentsPaginated(0, 2);
+        assertEq(page1.length, 2);
+        assertEq(page1[0], 2); // 最新评论
+        assertEq(page1[1], 1); // 第二新评论
+        
+        uint[] memory page2 = app.getRecentCommentsPaginated(1, 2);
+        assertEq(page2.length, 2);
+        assertEq(page2[0], 1); // 第二新评论
+        assertEq(page2[1], 0); // 最早评论
+    }
+
+    function test_AppGetRecentLikesPaginated() public {
+        // 注册其他用户
+        vm.prank(user2);
+        app.registerUser("Bob", "bio", "bob@example.com");
+        vm.prank(user3);
+        app.registerUser("Charlie", "bio", "charlie@example.com");
+        
+        // 创建评论
+        vm.prank(user);
+        app.comment(0, "comment1");
+        vm.prank(user);
+        app.comment(0, "comment2");
+        
+        // 不同用户点赞
+        vm.prank(user2);
+        app.like(0, 0);
+        vm.prank(user3);
+        app.like(0, 1);
+        vm.prank(user2);
+        app.like(0, 1);
+        
+        // 测试分页功能
+        uint[] memory page1 = app.getRecentLikesPaginated(0, 2);
+        assertEq(page1.length, 2);
+        assertEq(page1[0], 2); // 最新点赞
+        assertEq(page1[1], 1); // 第二新点赞
+        
+        uint[] memory page2 = app.getRecentLikesPaginated(2, 2);
+        assertEq(page2.length, 1);
+        assertEq(page2[0], 0); // 最早点赞
+    }
+
+    function test_AppGlobalCountFunctions() public {
+        // 初始状态
+        assertEq(app.getGlobalCommentsCount(), 0);
+        assertEq(app.getGlobalLikesCount(), 0);
+        
+        // 注册第二个用户
+        vm.prank(user2);
+        app.registerUser("Bob", "bio", "bob@example.com");
+        
+        // 创建评论
+        vm.prank(user);
+        app.comment(0, "comment1");
+        vm.prank(user2);
+        app.comment(0, "comment2");
+        
+        assertEq(app.getGlobalCommentsCount(), 2);
+        assertEq(app.getGlobalLikesCount(), 0);
+        
+        // 创建点赞
+        vm.prank(user2);
+        app.like(0, 0);
+        vm.prank(user);
+        app.like(0, 1);
+        
+        assertEq(app.getGlobalCommentsCount(), 2);
+        assertEq(app.getGlobalLikesCount(), 2);
+    }
+
+    function test_AppRecentPaginatedFunctions_EmptyCase() public {
+        // 空数据情况
+        uint[] memory emptyComments = app.getRecentCommentsPaginated(0, 5);
+        assertEq(emptyComments.length, 0);
+        
+        uint[] memory emptyLikes = app.getRecentLikesPaginated(0, 5);
+        assertEq(emptyLikes.length, 0);
+        
+        // 创建一个评论
+        vm.prank(user);
+        app.comment(0, "comment1");
+        
+        // 超出范围的startIndex
+        uint[] memory outOfRange = app.getRecentCommentsPaginated(5, 2);
+        assertEq(outOfRange.length, 0);
+    }
+
+    function test_AppRecentPaginatedFunctions_Integration() public {
+        // 注册第二个用户
+        vm.prank(user2);
+        app.registerUser("Bob", "bio", "bob@example.com");
+        
+        // 创建混合的评论和点赞
+        vm.prank(user);
+        app.comment(0, "user comment1");
+        vm.prank(user2);
+        app.comment(0, "user2 comment1");
+        vm.prank(user);
+        app.comment(0, "user comment2");
+        
+        vm.prank(user2);
+        app.like(0, 0);
+        vm.prank(user);
+        app.like(0, 1);
+        vm.prank(user2);
+        app.like(0, 2);
+        
+        // 验证全局计数
+        assertEq(app.getGlobalCommentsCount(), 3);
+        assertEq(app.getGlobalLikesCount(), 3);
+        
+        // 验证全局评论分页
+        uint[] memory allComments = app.getRecentCommentsPaginated(0, 10);
+        assertEq(allComments.length, 3);
+        assertEq(allComments[0], 2); // 最新评论
+        assertEq(allComments[1], 1);
+        assertEq(allComments[2], 0); // 最早评论
+        
+        // 验证全局点赞分页
+        uint[] memory allLikes = app.getRecentLikesPaginated(0, 10);
+        assertEq(allLikes.length, 3);
+        assertEq(allLikes[0], 2); // 最新点赞
+        assertEq(allLikes[1], 1);
+        assertEq(allLikes[2], 0); // 最早点赞
+        
+        // 验证分页功能
+        uint[] memory partialComments = app.getRecentCommentsPaginated(1, 1);
+        assertEq(partialComments.length, 1);
+        assertEq(partialComments[0], 1);
+        
+        uint[] memory partialLikes = app.getRecentLikesPaginated(1, 1);
+        assertEq(partialLikes.length, 1);
+        assertEq(partialLikes[0], 1);
     }
 } 
