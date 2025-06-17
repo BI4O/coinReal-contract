@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
+import "lib/forge-std/src/Test.sol";
 import {App} from "../src/core/App.sol";
 import {USDC} from "../src/token/USDC.sol";
 import {ProjectToken} from "../src/token/ProjectToken.sol";
@@ -11,12 +11,12 @@ import {ActionManager} from "../src/core/ActionManager.sol";
 import {CampaignToken} from "../src/token/Campaign.sol";
 
 contract RewardTest is Test {
-    App app;
-    USDC usdc;
-    ProjectToken projectToken;
-    UserManager userManager;
-    TopicManager topicManager;
-    ActionManager actionManager;
+    App public app; 
+    USDC public usdc;
+    ProjectToken public projectToken;
+    UserManager public userManager;
+    TopicManager public topicManager;
+    ActionManager public actionManager;
     
     address admin = address(this);
     address user1 = address(0x1);

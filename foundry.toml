@@ -5,7 +5,7 @@ libs = ["lib"]
 
 remappints=[
     "@openzeppelin/contracts/=./lib/openzeppelin-contracts/contracts/",
-    "@chainlink/local/=lib/chainlink-local/"
+    "@chainlink/local/=./lib/chainlink-local/"
 ]
 
 via_ir = true

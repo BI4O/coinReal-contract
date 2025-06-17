@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
+import "lib/forge-std/src/Test.sol";
 import {UserManager} from "../src/core/UserManager.sol";
 
 contract UserManagerTest is Test {

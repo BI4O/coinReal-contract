@@ -106,4 +106,73 @@ contract App {
     function comment(uint _topicId, string memory _content) public onlyRegisteredUser {
         actionManager.addComment(_topicId, msg.sender, _content);
     }
+
+    // 查询功能
+
+    // 获取用户最近的n个评论ID
+    function getUserRecentComments(address _userAddress, uint _n) public view returns (uint[] memory) {
+        return actionManager.getRecentCommentsByUserAddress(_userAddress, _n);
+    }
+
+    // 获取用户最近的n个点赞ID
+    function getUserRecentLikes(address _userAddress, uint _n) public view returns (uint[] memory) {
+        return actionManager.getRecentLikesByUserAddress(_userAddress, _n);
+    }
+
+    // 获取点赞数最多的n个评论ID
+    function getMostLikedComments(uint _n) public view returns (uint[] memory) {
+        return actionManager.getMostLikedComments(_n);
+    }
+
+    // 获取点赞数最少的n个评论ID
+    function getLeastLikedComments(uint _n) public view returns (uint[] memory) {
+        return actionManager.getLeastLikedComments(_n);
+    }
+
+    // 分页获取点赞数最多的评论ID
+    function getMostLikedCommentsPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
+        return actionManager.getMostLikedCommentsPaginated(startIndex, length);
+    }
+
+    // 分页获取点赞数最少的评论ID
+    function getLeastLikedCommentsPaginated(uint startIndex, uint length) public view returns (uint[] memory) {
+        return actionManager.getLeastLikedCommentsPaginated(startIndex, length);
+    }
+
+    // 获取有效评论总数
+    function getValidCommentsCount() public view returns (uint) {
+        return actionManager.getValidCommentsCount();
+    }
+
+    // 根据评论ID获取评论详情
+    function getComment(uint _commentId) public view returns (ActionManager.Comment memory) {
+        return actionManager.getComment(_commentId);
+    }
+
+    // 根据点赞ID获取点赞详情
+    function getLike(uint _likeId) public view returns (ActionManager.Like memory) {
+        return actionManager.getLike(_likeId);
+    }
+
+    // 获取评论的点赞数
+    function getCommentLikeCount(uint _commentId) public view returns (uint) {
+        return actionManager.getLikeCount(_commentId);
+    }
+
+    // 获取评论的标签
+    function getCommentTags(uint _commentId) public view returns (string[] memory) {
+        return actionManager.getCommentTags(_commentId);
+    }
+
+    // 管理功能
+
+    // 为评论添加标签（只有管理员可以）
+    function addCommentTags(uint _commentId, string[] memory _tags) public onlyAdmin {
+        actionManager.addTags(_commentId, _tags);
+    }
+
+    // 删除评论（只有评论作者可以）
+    function deleteComment(uint _commentId) public onlyRegisteredUser {
+        actionManager.deleteCommentByUser(_commentId, msg.sender);
+    }
 }
