@@ -489,6 +489,176 @@ contract ActionManager {
             rewardsDistributed[_campaignId]
         );
     }
+
+    // 查：给定campaignId，userId，假如现在就结束活动，我预计可得多少钱（USDC和projectToken）
+    function getExpectedReward(uint _campaignId, address _user) public view returns (uint[2] memory worstCase, uint[2] memory bestCase) {
+        // 获取活动信息
+        TopicManager.CampaignInfo memory campaignInfo = topicManager.getCampaignInfo(_campaignId);
+        
+        // 如果活动不存在或已结束，则返回0
+        if (_campaignId >= topicManager.nextCampaignId() || !campaignInfo.isActive) {
+            return (
+                [uint(0), uint(0)],  // 最差情况
+                [uint(0), uint(0)]   // 最好情况
+            );
+        }
+        
+        // 获取CampaignToken地址和用户余额
+        address campaignTokenAddr = topicManager.getCampaignToken(_campaignId);
+        CampaignToken campaignToken = CampaignToken(campaignTokenAddr);
+        uint userBalance = campaignToken.balanceOf(_user);
+        
+        // 如果用户没有CampaignToken，则返回0
+        if (userBalance == 0) {
+            return (
+                [uint(0), uint(0)],  // 最差情况
+                [uint(0), uint(0)]   // 最好情况
+            );
+        }
+        
+        // 计算用户通过CampaignToken获得的基础奖励（最差情况）
+        uint totalSupply = campaignToken.totalSupply();
+        
+        // 获取活动的USDC和projectToken总量
+        uint usdcAmount = campaignToken.getFundedUSDC();
+        uint projectTokenAmount = campaignToken.getFundedProjectToken();
+        
+        // 按比例计算用户应得的奖励
+        uint userUsdcReward = totalSupply > 0 ? (usdcAmount * userBalance) / totalSupply : 0;
+        uint userPTokenReward = totalSupply > 0 ? (projectTokenAmount * userBalance) / totalSupply : 0;
+        
+        // 设置最差情况
+        worstCase[0] = userUsdcReward;
+        worstCase[1] = userPTokenReward;
+        
+        // 复制最差情况到最好情况（基础值）
+        bestCase[0] = userUsdcReward;
+        bestCase[1] = userPTokenReward;
+        
+        // 检查用户是否可能成为质量评论者
+        bool isPotentialQualityCommenter = false;
+        uint topicId = campaignInfo.topicId;
+        
+        // 获取用户在该topic下的所有评论
+        uint[] memory userComments = getRecentCommentsByUserAddress(_user, 100);
+        
+        // 如果用户有评论，检查是否可能进入top评论者
+        if (userComments.length > 0) {
+            // 获取质量评论者数量
+            uint qualityCommenterNum = topicManager.qualityCommenterNum();
+            
+            // 获取最多点赞的评论
+            uint[] memory topComments = getMostLikedComments(qualityCommenterNum);
+            
+            // 检查用户的评论是否在top列表中
+            for (uint i = 0; i < userComments.length; i++) {
+                uint commentId = userComments[i];
+                // 确保评论属于该topic且未删除
+                if (comments[commentId].topicId == topicId && !comments[commentId].isDelete) {
+                    for (uint j = 0; j < topComments.length; j++) {
+                        if (commentId == topComments[j]) {
+                            isPotentialQualityCommenter = true;
+                            break;
+                        }
+                    }
+                    if (isPotentialQualityCommenter) break;
+                }
+            }
+        }
+        
+        // 检查用户是否可能成为点赞抽奖幸运者
+        bool isPotentialLuckyLiker = false;
+        
+        // 检查用户是否对该活动的评论进行过点赞
+        if (hasLikedInTopicCampaign[topicId][_campaignId][_user]) {
+            isPotentialLuckyLiker = true;
+        }
+        
+        // 如果用户可能成为质量评论者，添加相应奖励
+        if (isPotentialQualityCommenter) {
+            uint qualityCommenterFee = qualityCommenterFeePool[_campaignId];
+            uint qualityCommenterNum = topicManager.qualityCommenterNum();
+            
+            // 计算每个质量评论者可获得的奖励
+            uint qualityCommenterReward = qualityCommenterNum > 0 ? qualityCommenterFee / qualityCommenterNum : 0;
+            bestCase[0] += qualityCommenterReward;
+        }
+        
+        // 如果用户可能成为点赞抽奖幸运者，添加相应奖励
+        if (isPotentialLuckyLiker) {
+            uint lotteryFee = lotteryForLikerFeePool[_campaignId];
+            
+            // 获取该活动的所有点赞者
+            address[] memory likers = getCampaignLikers(_campaignId);
+            
+            // 确定抽奖人数（不超过实际点赞人数）
+            uint qualityCommenterNum = topicManager.qualityCommenterNum();
+            uint lotteryCount = likers.length < qualityCommenterNum ? likers.length : qualityCommenterNum;
+            
+            // 计算每个幸运点赞者可获得的奖励
+            uint lotteryReward = lotteryCount > 0 ? lotteryFee / lotteryCount : 0;
+            
+            // 根据概率添加奖励（简化处理，直接添加全部可能奖励）
+            bestCase[0] += lotteryReward;
+        }
+        
+        return (worstCase, bestCase);
+    }
+
+    // 查：给定campaignId，目前各个奖池各有多少钱，以及有多人分
+    function getFundPoolInfo(uint _campaignId) public view returns (uint[3] memory qualityPool, uint[3] memory lotteryPool, uint[3] memory campaignPool) {
+        // 如果活动不存在，则返回0
+        if (_campaignId >= topicManager.nextCampaignId()) {
+            return (
+                [uint(0), uint(0), uint(0)],  // 质量评论者奖池
+                [uint(0), uint(0), uint(0)],  // 点赞抽奖奖池
+                [uint(0), uint(0), uint(0)]   // CampaignToken奖池
+            );
+        }
+        
+        // 获取CampaignToken地址
+        address campaignTokenAddr = topicManager.getCampaignToken(_campaignId);
+        CampaignToken campaignToken = CampaignToken(campaignTokenAddr);
+        
+        // 获取质量评论者数量
+        uint qualityCommenterNum = topicManager.qualityCommenterNum();
+        
+        // 获取质量评论者奖池中的USDC数量
+        uint qualityCommenterFee = qualityCommenterFeePool[_campaignId];
+        
+        // 获取点赞抽奖奖池中的USDC数量
+        uint lotteryFee = lotteryForLikerFeePool[_campaignId];
+        
+        // 获取该活动的所有点赞者
+        address[] memory likers = getCampaignLikers(_campaignId);
+        
+        // 确定抽奖人数（不超过实际点赞人数）
+        uint lotteryCount = likers.length < qualityCommenterNum ? likers.length : qualityCommenterNum;
+        
+        // 获取活动的USDC和projectToken总量
+        uint campaignUsdcAmount = campaignToken.getFundedUSDC();
+        uint campaignPTokenAmount = campaignToken.getFundedProjectToken();
+        
+        // 获取评论者和点赞者总数（简化计算，可能有重复）
+        uint totalParticipants = getGlobalCommentsCount() + likers.length;
+        
+        // 设置质量评论者奖池信息
+        qualityPool[0] = qualityCommenterNum;
+        qualityPool[1] = qualityCommenterFee;
+        qualityPool[2] = 0; // 质量评论者奖池中没有项目代币
+        
+        // 设置点赞抽奖奖池信息
+        lotteryPool[0] = lotteryCount;
+        lotteryPool[1] = lotteryFee;
+        lotteryPool[2] = 0; // 点赞抽奖奖池中没有项目代币
+        
+        // 设置CampaignToken奖池信息
+        campaignPool[0] = totalParticipants;
+        campaignPool[1] = campaignUsdcAmount;
+        campaignPool[2] = campaignPTokenAmount;
+        
+        return (qualityPool, lotteryPool, campaignPool);
+    }
     
 
     // 删：删除评论

@@ -6,6 +6,7 @@ import {UserManager} from "../src/core/UserManager.sol";
 import {TopicManager} from "../src/core/TopicManager.sol";
 import {ActionManager} from "../src/core/ActionManager.sol";
 import {USDC} from "../src/token/USDC.sol";
+import {ProjectToken} from "../src/token/ProjectToken.sol";
 import {MockVRF} from "../src/chainlink/MockVRF.sol";
 
 contract ActionManagerTest is Test {
@@ -480,5 +481,82 @@ contract ActionManagerTest is Test {
         uint[] memory partialLikes = actionManager.getRecentLikesPaginated(1, 1);
         assertEq(partialLikes.length, 1);
         assertEq(partialLikes[0], 1);
+    }
+
+    function test_GetExpectedReward() public view {
+        // 测试非活跃活动
+        (uint[2] memory inactiveWorst, uint[2] memory inactiveBest) = actionManager.getExpectedReward(999, user);
+        assertEq(inactiveWorst[0], 0, "Inactive campaign worst USDC should be 0");
+        assertEq(inactiveWorst[1], 0, "Inactive campaign worst token should be 0");
+        assertEq(inactiveBest[0], 0, "Inactive campaign best USDC should be 0");
+        assertEq(inactiveBest[1], 0, "Inactive campaign best token should be 0");
+    }
+    
+    function test_GetFundPoolInfo() public view {
+        // 测试非活跃活动
+        (uint[3] memory inactiveQuality, uint[3] memory inactiveLottery, uint[3] memory inactiveCampaign) = actionManager.getFundPoolInfo(999);
+        assertEq(inactiveQuality[0], 0, "Inactive quality count should be 0");
+        assertEq(inactiveQuality[1], 0, "Inactive quality USDC should be 0");
+        assertEq(inactiveLottery[0], 0, "Inactive lottery count should be 0");
+        assertEq(inactiveLottery[1], 0, "Inactive lottery USDC should be 0");
+        assertEq(inactiveCampaign[0], 0, "Inactive campaign participants should be 0");
+        assertEq(inactiveCampaign[1], 0, "Inactive campaign USDC should be 0");
+    }
+    
+    function test_GetExpectedRewardAndFundPoolInfoIntegration() public {
+        // 创建一个真实的项目代币
+        ProjectToken projectToken = new ProjectToken();
+        projectToken.deployerMint(1000 * 1e18); // 铸造一些项目代币
+        
+        // 注册活动
+        (bool ok, uint campaignId) = topicManager.registerCampaign(address(this), 0, "Test Campaign", "Test Description", address(projectToken));
+        assertTrue(ok);
+        
+        // 为活动注资USDC
+        usdc.deployerMint(1000 * 1e6);
+        usdc.approve(address(topicManager), 1000 * 1e6);
+        topicManager.fundCampaignWithUSDC(campaignId, 1000 * 1e6);
+        
+        // 为活动注资项目代币
+        projectToken.approve(address(topicManager), 500 * 1e18);
+        topicManager.fundCampaignWithProjectToken(campaignId, 500 * 1e18);
+        
+        // 启动活动
+        topicManager.startCampaign(campaignId, block.timestamp + 7 days);
+        
+        // 用户发表评论
+        actionManager.addComment(0, user, "Test comment 1");
+        actionManager.addComment(0, user2, "Test comment 2");
+        
+        // 用户互相点赞
+        actionManager.addLike(0, 0, user2); // user2点赞user的评论
+        actionManager.addLike(0, 1, user);  // user点赞user2的评论
+        
+        // 获取奖池信息
+        (uint[3] memory qualityPool, uint[3] memory lotteryPool, uint[3] memory campaignPool) = actionManager.getFundPoolInfo(campaignId);
+        
+        // 验证质量评论者奖池
+        assertEq(qualityPool[0], 2, "Quality commenter count should be 2");
+        assertEq(qualityPool[1], 1000 * 1e6 * 10 / 100, "Quality commenter USDC should be 10%");
+        
+        // 验证点赞抽奖奖池
+        assertEq(lotteryPool[0], 2, "Lottery winner count should be 2");
+        assertEq(lotteryPool[1], 1000 * 1e6 * 5 / 100, "Lottery USDC should be 5%");
+        
+        // 验证CampaignToken奖池
+        assertTrue(campaignPool[0] > 0, "Total participants should be > 0");
+        assertTrue(campaignPool[1] > 0, "Campaign USDC should be > 0");
+        assertTrue(campaignPool[2] > 0, "Campaign token should be > 0");
+        
+        // 获取用户预期奖励
+        (uint[2] memory user1WorstCase, uint[2] memory user1BestCase) = actionManager.getExpectedReward(campaignId, user);
+        (uint[2] memory user2WorstCase, uint[2] memory user2BestCase) = actionManager.getExpectedReward(campaignId, user2);
+        
+        // 验证用户奖励
+        assertTrue(user1WorstCase[0] > 0 || user1WorstCase[1] > 0, "User1 worst case reward should be > 0");
+        assertTrue(user1BestCase[0] >= user1WorstCase[0], "User1 best case USDC should be >= worst case");
+        
+        assertTrue(user2WorstCase[0] > 0 || user2WorstCase[1] > 0, "User2 worst case reward should be > 0");
+        assertTrue(user2BestCase[0] >= user2WorstCase[0], "User2 best case USDC should be >= worst case");
     }
 } 
