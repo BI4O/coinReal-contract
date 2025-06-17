@@ -6,6 +6,8 @@ import {UserManager} from "./UserManager.sol";
 import {CampaignToken} from "../token/Campaign.sol";
 import {TimeSerLinkArray} from "../utils/TimeSerLinkArray.sol";
 import {CountSerLinkArray} from "../utils/CountSerLinkArray.sol";
+import {MockVRF} from "../chainlink/MockVRF.sol";
+import {USDC} from "../token/USDC.sol";
 
 contract ActionManager {
     address public owner;
@@ -13,6 +15,7 @@ contract ActionManager {
     // 用来校验topic是否存在
     TopicManager public topicManager;
     UserManager public userManager;
+    MockVRF public mockVRF;
 
     uint public nextCommentId;
     uint public nextLikeId;
@@ -56,6 +59,20 @@ contract ActionManager {
     mapping(uint => mapping(address => bool)) public hasLiked;
     // 检验某个评论对各个活动的Token的奖励的余额 [commentId][campaignId]
     mapping(uint => mapping(uint => uint)) public commentToTokenRewardBalances;
+    
+    // 费用池管理
+    mapping(uint => uint) public platformFeePool;           // campaignId => 平台费金额
+    mapping(uint => uint) public qualityCommenterFeePool;   // campaignId => 质量评论者费用池
+    mapping(uint => uint) public lotteryForLikerFeePool;    // campaignId => 点赞者抽奖费用池
+    
+    // 记录每个活动的点赞者（按topic分组）
+    mapping(uint => mapping(uint => address[])) public topicCampaignLikers;  // topicId => campaignId => 点赞者数组
+    mapping(uint => mapping(uint => mapping(address => bool))) public hasLikedInTopicCampaign; // 防重复记录
+    
+    // 活动结束后的分配记录
+    mapping(uint => address[]) public topCommenters;        // campaignId => top评论者地址数组
+    mapping(uint => address[]) public luckyLikers;          // campaignId => 幸运点赞者地址数组
+    mapping(uint => bool) public rewardsDistributed;        // campaignId => 是否已分配奖励
 
     // 链表实例
     TimeSerLinkArray public timeSerLinkArray;
@@ -66,13 +83,15 @@ contract ActionManager {
         address _topicManagerAddr, 
         address _userManagerAddr,
         uint _commentRewardAmount,
-        uint _likeRewardAmount
+        uint _likeRewardAmount,
+        address _mockVRFAddr
     ) {
         nextCommentId = 0;
         nextLikeId = 0;
         owner = msg.sender;
         topicManager = TopicManager(_topicManagerAddr);
         userManager = UserManager(_userManagerAddr);
+        mockVRF = MockVRF(_mockVRFAddr);
         commentRewardAmount = _commentRewardAmount;
         likeRewardAmount = _likeRewardAmount;
         commentRewardExtraAmount = _likeRewardAmount / 2; // 设置为点赞奖励的一半
@@ -212,6 +231,20 @@ contract ActionManager {
         // 奖励代币
         likeReward(_topicId, nextLikeId, _user);
         
+        // 记录点赞者到所有相关活动中
+        uint[] memory campaignIds = topicManager.getTopicCampaigns(_topicId);
+        for (uint i = 0; i < campaignIds.length; i++) {
+            uint campaignId = campaignIds[i];
+            // 只有活动激活时才记录点赞者
+            TopicManager.CampaignInfo memory campaignInfo = topicManager.getCampaignInfo(campaignId);
+            if (campaignInfo.isActive) {
+                if (!hasLikedInTopicCampaign[_topicId][campaignId][_user]) {
+                    topicCampaignLikers[_topicId][campaignId].push(_user);
+                    hasLikedInTopicCampaign[_topicId][campaignId][_user] = true;
+                }
+            }
+        }
+        
         // 添加到时间序列链表（用户点赞历史）
         timeSerLinkArray.addItem(_user, timeSerLinkArray.LIKE_LIST(), nextLikeId, block.timestamp);
         
@@ -298,6 +331,165 @@ contract ActionManager {
     function getGlobalLikesCount() public view returns (uint) {
         return timeSerLinkArray.getGlobalListSize(timeSerLinkArray.LIKE_LIST());
     }
+
+    // 查：给定用户地址address和campaignId，查询假如目前活动结束，预计可得多少钱
+    function getExpectedReward(address _user, uint _campaignId) public view returns (uint) {
+        // todo
+    }
+    
+    // 活动注资时分配费用
+    function allocateFundsOnCampaignFunding(uint _campaignId, uint _amount) external {
+        require(msg.sender == address(topicManager), "Only TopicManager can call this function");
+        
+        // 计算各项费用
+        uint platformFee = _amount * topicManager.platformFeePercent() / 100;
+        uint qualityCommenterFee = _amount * topicManager.qualityCommenterFeePercent() / 100;
+        uint lotteryFee = _amount * topicManager.lotteryForLikerFeePercent() / 100;
+        
+        // 分配费用到各个池子
+        platformFeePool[_campaignId] += platformFee;
+        qualityCommenterFeePool[_campaignId] += qualityCommenterFee;
+        lotteryForLikerFeePool[_campaignId] += lotteryFee;
+    }
+    
+    // 获取指定活动的点赞者列表
+    function getCampaignLikers(uint _campaignId) public view returns (address[] memory) {
+        TopicManager.CampaignInfo memory campaignInfo = topicManager.getCampaignInfo(_campaignId);
+        uint topicId = campaignInfo.topicId;
+        return topicCampaignLikers[topicId][_campaignId];
+    }
+    
+    // 分配活动奖励
+    function distributeRewards(uint _campaignId) external {
+        require(msg.sender == address(topicManager), "Only TopicManager can call this function");
+        require(!rewardsDistributed[_campaignId], "Rewards already distributed");
+        
+        TopicManager.CampaignInfo memory campaignInfo = topicManager.getCampaignInfo(_campaignId);
+        require(!campaignInfo.isActive, "Campaign still active");
+        
+        // 1. 分配质量评论者奖励
+        _distributeQualityCommenterRewards(_campaignId);
+        
+        // 2. 分配点赞者抽奖奖励
+        _distributeLotteryRewards(_campaignId);
+        
+        rewardsDistributed[_campaignId] = true;
+    }
+    
+    // 分配质量评论者奖励
+    function _distributeQualityCommenterRewards(uint _campaignId) private {
+        if (qualityCommenterFeePool[_campaignId] == 0) return;
+        
+        TopicManager.CampaignInfo memory campaignInfo = topicManager.getCampaignInfo(_campaignId);
+        uint topicId = campaignInfo.topicId;
+        uint qualityCommenterNum = topicManager.qualityCommenterNum();
+        
+        // 获取最高点赞评论
+        uint[] memory topCommentIds = getMostLikedComments(qualityCommenterNum);
+        
+        // 过滤出属于该topic的评论，并获取评论者地址
+        address[] memory commenterAddresses = new address[](qualityCommenterNum);
+        uint validCount = 0;
+        
+        for (uint i = 0; i < topCommentIds.length && validCount < qualityCommenterNum; i++) {
+            if (comments[topCommentIds[i]].topicId == topicId && !comments[topCommentIds[i]].isDelete) {
+                commenterAddresses[validCount] = comments[topCommentIds[i]].user;
+                validCount++;
+            }
+        }
+        
+        // 平分奖励
+        if (validCount > 0) {
+            USDC usdc = USDC(topicManager.usdc());
+            uint rewardPerCommenter = qualityCommenterFeePool[_campaignId] / validCount;
+            
+            // 调整数组大小
+            address[] memory finalCommenters = new address[](validCount);
+            for (uint i = 0; i < validCount; i++) {
+                finalCommenters[i] = commenterAddresses[i];
+                usdc.transfer(commenterAddresses[i], rewardPerCommenter);
+            }
+            topCommenters[_campaignId] = finalCommenters;
+        }
+    }
+    
+    // 分配点赞者抽奖奖励
+    function _distributeLotteryRewards(uint _campaignId) private {
+        if (lotteryForLikerFeePool[_campaignId] == 0) return;
+        
+        // 获取该活动的所有点赞者
+        address[] memory likers = getCampaignLikers(_campaignId);
+        
+        if (likers.length == 0) return;
+        
+        uint qualityCommenterNum = topicManager.qualityCommenterNum();
+        // 确定抽奖人数（不超过实际点赞人数）
+        uint lotteryCount = likers.length < qualityCommenterNum ? likers.length : qualityCommenterNum;
+        
+        // 使用VRF获取随机数
+        uint256 requestId = mockVRF.requestRandomWords(uint32(lotteryCount));
+        uint256[] memory randomWords = mockVRF.getRandomWords(requestId);
+        
+        address[] memory winners = new address[](lotteryCount);
+        bool[] memory selected = new bool[](likers.length);
+        
+        // 随机选择获奖者（避免重复）
+        for (uint i = 0; i < lotteryCount; i++) {
+            uint randomIndex;
+            uint attempts = 0;
+            do {
+                randomIndex = randomWords[i] % likers.length;
+                attempts++;
+                // 防止无限循环，如果尝试次数过多，就顺序选择
+                if (attempts > 100) {
+                    for (uint j = 0; j < likers.length; j++) {
+                        if (!selected[j]) {
+                            randomIndex = j;
+                            break;
+                        }
+                    }
+                    break;
+                }
+            } while (selected[randomIndex]);
+            
+            selected[randomIndex] = true;
+            winners[i] = likers[randomIndex];
+        }
+        
+        // 平分奖励
+        USDC usdc = USDC(topicManager.usdc());
+        uint rewardPerWinner = lotteryForLikerFeePool[_campaignId] / lotteryCount;
+        for (uint i = 0; i < lotteryCount; i++) {
+            usdc.transfer(winners[i], rewardPerWinner);
+        }
+        
+        luckyLikers[_campaignId] = winners;
+    }
+    
+    // 提取平台费用
+    function withdrawPlatformFee(uint _campaignId, address _to) external {
+        require(msg.sender == address(topicManager), "Only TopicManager can call this function");
+        require(platformFeePool[_campaignId] > 0, "No platform fees to withdraw");
+        
+        USDC usdc = USDC(topicManager.usdc());
+        uint amount = platformFeePool[_campaignId];
+        platformFeePool[_campaignId] = 0;
+        usdc.transfer(_to, amount);
+    }
+    
+    // 查询奖励分配信息
+    function getRewardDistributionInfo(uint _campaignId) external view returns (
+        address[] memory topCommentersArray,
+        address[] memory luckyLikersArray,
+        bool distributed
+    ) {
+        return (
+            topCommenters[_campaignId],
+            luckyLikers[_campaignId],
+            rewardsDistributed[_campaignId]
+        );
+    }
+    
 
     // 删：删除评论
     function deleteComment(uint _commentId) public returns(bool) {

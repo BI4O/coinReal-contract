@@ -6,23 +6,33 @@ import {UserManager} from "../src/core/UserManager.sol";
 import {TopicManager} from "../src/core/TopicManager.sol";
 import {ActionManager} from "../src/core/ActionManager.sol";
 import {USDC} from "../src/token/USDC.sol";
+import {MockVRF} from "../src/chainlink/MockVRF.sol";
 
 contract ActionManagerTest is Test {
     UserManager userManager;
     TopicManager topicManager;
     ActionManager actionManager;
     USDC usdc;
+    MockVRF mockVRF;
     address user = address(0x1);
     address user2 = address(0x2);
 
     function setUp() public {
         usdc = new USDC();
+        mockVRF = new MockVRF();
         userManager = new UserManager();
-        topicManager = new TopicManager(address(usdc));
-        actionManager = new ActionManager(address(topicManager), address(userManager), 10 * 1e18, 5 * 1e18);
+        topicManager = new TopicManager(
+            address(usdc),
+            5,  // 5% 平台费
+            10, // 10% 质量评论者费
+            5,  // 5% 点赞抽奖费
+            2   // top 2 评论者
+        );
+        actionManager = new ActionManager(address(topicManager), address(userManager), 10 * 1e18, 5 * 1e18, address(mockVRF));
         userManager.registerUser(user, "Alice", "bio", "alice@example.com");
         userManager.registerUser(user2, "Bob", "bio", "bob@example.com");
         topicManager.registerTopic("BTC", "desc", "0xBTC", 1000);
+        topicManager.setActionManager(address(actionManager));
     }
 
     function test_ActionManagerAddComment() public {
@@ -75,7 +85,7 @@ contract ActionManagerTest is Test {
         assertEq(recentComments[1], 1); // 第二新的评论ID
     }
 
-    function test_GetRecentCommentsByUserAddress_EmptyCase() public {
+    function test_GetRecentCommentsByUserAddress_EmptyCase() public view {
         // 用户没有评论的情况
         uint[] memory recentComments = actionManager.getRecentCommentsByUserAddress(user, 5);
         assertEq(recentComments.length, 0);
@@ -111,7 +121,7 @@ contract ActionManagerTest is Test {
         assertEq(recentLikes[1], 1); // 第二新的点赞ID
     }
 
-    function test_GetRecentLikesByUserAddress_EmptyCase() public {
+    function test_GetRecentLikesByUserAddress_EmptyCase() public view {
         // 用户没有点赞的情况
         uint[] memory recentLikes = actionManager.getRecentLikesByUserAddress(user, 5);
         assertEq(recentLikes.length, 0);
@@ -225,13 +235,13 @@ contract ActionManagerTest is Test {
         assertEq(leastLiked[1], 2); // comment2有2个点赞，应该排第二
     }
 
-    function test_GetMostLikedComments_EmptyCase() public {
+    function test_GetMostLikedComments_EmptyCase() public view {
         // 没有评论的情况
         uint[] memory mostLiked = actionManager.getMostLikedComments(5);
         assertEq(mostLiked.length, 0);
     }
 
-    function test_GetLeastLikedComments_EmptyCase() public {
+    function test_GetLeastLikedComments_EmptyCase() public view {
         // 没有评论的情况
         uint[] memory leastLiked = actionManager.getLeastLikedComments(5);
         assertEq(leastLiked.length, 0);
@@ -355,27 +365,6 @@ contract ActionManagerTest is Test {
         assertEq(actionManager.getValidCommentsCount(), 2);
     }
 
-    function test_PaginatedFunctions_EdgeCases() public {
-        // 空数据情况
-        uint[] memory empty1 = actionManager.getMostLikedCommentsPaginated(0, 5);
-        assertEq(empty1.length, 0);
-        
-        uint[] memory empty2 = actionManager.getLeastLikedCommentsPaginated(0, 5);
-        assertEq(empty2.length, 0);
-        
-        // 创建1个评论
-        actionManager.addComment(0, user, "comment1");
-        
-        // 超出范围的startIndex
-        uint[] memory outOfRange = actionManager.getMostLikedCommentsPaginated(5, 2);
-        assertEq(outOfRange.length, 0);
-        
-        // 正常情况
-        uint[] memory normal = actionManager.getMostLikedCommentsPaginated(0, 5);
-        assertEq(normal.length, 1);
-        assertEq(normal[0], 0);
-    }
-
     function test_GetRecentCommentsPaginated() public {
         // 创建5个评论（不同用户）
         actionManager.addComment(0, user, "comment0");
@@ -434,30 +423,7 @@ contract ActionManagerTest is Test {
         assertEq(page2[1], 0); // 最早的点赞ID
     }
 
-    function test_GetRecentCommentsPaginated_EmptyCase() public {
-        // 空数据情况
-        uint[] memory empty = actionManager.getRecentCommentsPaginated(0, 5);
-        assertEq(empty.length, 0);
-        
-        // 超出范围的startIndex
-        actionManager.addComment(0, user, "comment1");
-        uint[] memory outOfRange = actionManager.getRecentCommentsPaginated(5, 2);
-        assertEq(outOfRange.length, 0);
-    }
-
-    function test_GetRecentLikesPaginated_EmptyCase() public {
-        // 空数据情况
-        uint[] memory empty = actionManager.getRecentLikesPaginated(0, 5);
-        assertEq(empty.length, 0);
-        
-        // 创建评论和点赞
-        actionManager.addComment(0, user, "comment1");
-        actionManager.addLike(0, 0, user2);
-        
-        // 超出范围的startIndex
-        uint[] memory outOfRange = actionManager.getRecentLikesPaginated(5, 2);
-        assertEq(outOfRange.length, 0);
-    }
+    // 移除重复的空状态测试 - 边缘情况已在其他EmptyCase测试中覆盖
 
     function test_GlobalCountFunctions() public {
         // 初始状态

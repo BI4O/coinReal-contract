@@ -4,6 +4,7 @@ import {CampaignFactory} from "../token/CampaignFactory.sol";
 import {CampaignToken} from "../token/Campaign.sol";
 import {TopicItem} from "./TopicItem.sol";
 import {USDC} from "../token/USDC.sol";
+import {ActionManager} from "./ActionManager.sol";
 
 // TopicManager是在TopicItem的基础上，添加了话题管理功能
 contract TopicManager is TopicItem {
@@ -15,6 +16,7 @@ contract TopicManager is TopicItem {
     USDC public usdc;
 
     CampaignFactory public campaignFactory; // 活动工厂
+    ActionManager public actionManager; // ActionManager引用
 
     // 活动信息管理 - 一对多关系
     uint public nextCampaignId;
@@ -46,11 +48,43 @@ contract TopicManager is TopicItem {
     mapping(uint => CampaignInfo) public campaignInfos;
     
 
-    // 构造函数，接受的USDC地址
-    constructor(address _usdcAddr) {
+    // 费用分配比例
+    uint public platformFeePercent;
+    uint public qualityCommenterFeePercent; 
+    uint public lotteryForLikerFeePercent;
+    uint public qualityCommenterNum;
+
+    // 构造函数，接受的USDC地址，平台费，质量评论者费，点赞抽奖费
+    constructor(
+        address _usdcAddr,
+        uint _platformFeePercent, 
+        uint _qualityCommenterFeePercent,
+        uint _lotteryForLikerFeePercent,
+        uint _qualityCommenterNum
+    ) {
+        // 要剩下一些给到campaignToken，所以总和必须小于100
+        require(
+            _platformFeePercent 
+            + _qualityCommenterFeePercent 
+            + _lotteryForLikerFeePercent < 100,
+            "Fee sum must be less than 100"
+        );
+        
         owner = msg.sender;
         usdc = USDC(_usdcAddr);
         campaignFactory = new CampaignFactory(_usdcAddr);
+        
+        // 保存费用分配参数
+        platformFeePercent = _platformFeePercent;
+        qualityCommenterFeePercent = _qualityCommenterFeePercent;
+        lotteryForLikerFeePercent = _lotteryForLikerFeePercent;
+        qualityCommenterNum = _qualityCommenterNum;
+    }
+    
+    // 设置ActionManager地址
+    function setActionManager(address _actionManagerAddr) public {
+        require(msg.sender == owner, "Only owner can call this function");
+        actionManager = ActionManager(_actionManagerAddr);
     }
 
     function setOwner(address _owner) public {
@@ -113,12 +147,27 @@ contract TopicManager is TopicItem {
 
     // 活动开始前注资USDC
     function fundCampaignWithUSDC(uint _campaignId, uint _amount) public {
+        // 计算各项费用
+        uint platformFee = _amount * platformFeePercent / 100;
+        uint qualityCommenterFee = _amount * qualityCommenterFeePercent / 100;
+        uint lotteryFee = _amount * lotteryForLikerFeePercent / 100;
+        uint campaignTokenAmount = _amount - platformFee - qualityCommenterFee - lotteryFee;
+        
+        // 转账：平台费和奖励费用到ActionManager，剩余到CampaignToken
         CampaignToken c = CampaignToken(campaigns[_campaignId]);
-        usdc.transferFrom(msg.sender, address(c), _amount);
+        usdc.transferFrom(msg.sender, address(actionManager), platformFee + qualityCommenterFee + lotteryFee);
+        usdc.transferFrom(msg.sender, address(c), campaignTokenAmount);
+        
+        // 通知ActionManager分配费用
+        if (address(actionManager) != address(0)) {
+            actionManager.allocateFundsOnCampaignFunding(_campaignId, _amount);
+        }
     }
 
     // 活动开始前注资项目代币
     function fundCampaignWithProjectToken(uint _campaignId, uint _amount) public {
+        // 项目代币注资暂时不分配费用，全部给CampaignToken
+        // 后续可以根据需要修改
         CampaignToken c = CampaignToken(campaigns[_campaignId]);
         c.projectToken().transferFrom(msg.sender, address(c), _amount);
     }   
@@ -188,6 +237,11 @@ contract TopicManager is TopicItem {
         campaignInfos[_campaignId].rewardUsdcPerMillionCPToken = c.usdcPerMillionCPToken();
         campaignInfos[_campaignId].rewardPtokenPerMillionCPToken = c.ptokenPerMillionCPToken();
         campaignInfos[_campaignId].jackpot = c.jackpotRealTime();
+        
+        // 活动结束后自动分配额外奖励
+        if (address(actionManager) != address(0)) {
+            actionManager.distributeRewards(_campaignId);
+        }
     }
 
     // 删除活动
@@ -221,5 +275,27 @@ contract TopicManager is TopicItem {
     // 获取Topic的Campaign列表
     function getTopicCampaigns(uint _topicId) public view returns (uint[] memory) {
         return topicCampaigns[_topicId];
+    }
+    
+    // 提取平台费用
+    function withdrawPlatformFee(uint _campaignId) public {
+        require(msg.sender == owner, "Only owner can call this function");
+        if (address(actionManager) != address(0)) {
+            actionManager.withdrawPlatformFee(_campaignId, owner);
+        }
+    }
+    
+    // 查询奖励分配信息
+    function getRewardDistributionInfo(uint _campaignId) public view returns (
+        address[] memory topCommenters,
+        address[] memory luckyLikers,
+        bool distributed
+    ) {
+        if (address(actionManager) != address(0)) {
+            // 需要通过函数调用而不是直接访问mapping
+            return actionManager.getRewardDistributionInfo(_campaignId);
+        } else {
+            return (new address[](0), new address[](0), false);
+        }
     }
 }

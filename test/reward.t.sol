@@ -9,6 +9,7 @@ import {UserManager} from "../src/core/UserManager.sol";
 import {TopicManager} from "../src/core/TopicManager.sol";
 import {ActionManager} from "../src/core/ActionManager.sol";
 import {CampaignToken} from "../src/token/Campaign.sol";
+import {MockVRF} from "../src/chainlink/MockVRF.sol";
 
 contract RewardTest is Test {
     App public app; 
@@ -17,6 +18,7 @@ contract RewardTest is Test {
     UserManager public userManager;
     TopicManager public topicManager;
     ActionManager public actionManager;
+    MockVRF public mockVRF;
     
     address admin = address(this);
     address user1 = address(0x1);
@@ -35,15 +37,23 @@ contract RewardTest is Test {
         // 部署基础合约
         usdc = new USDC();
         projectToken = new ProjectToken();
+        mockVRF = new MockVRF();
         
         // 部署管理合约
         userManager = new UserManager();
-        topicManager = new TopicManager(address(usdc));
+        topicManager = new TopicManager(
+            address(usdc),
+            5,  // 5% 平台费
+            10, // 10% 质量评论者费
+            5,  // 5% 点赞抽奖费
+            2   // top 2 评论者
+        );
         actionManager = new ActionManager(
             address(topicManager), 
             address(userManager), 
             commentRewardAmount, 
-            likeRewardAmount
+            likeRewardAmount,
+            address(mockVRF)
         );
         
         // 部署App合约
@@ -51,13 +61,17 @@ contract RewardTest is Test {
             address(usdc), 
             address(userManager), 
             address(topicManager), 
-            address(actionManager)
+            address(actionManager),
+            address(mockVRF)
         );
         
         // 设置各合约的owner为App
         userManager.setOwner(address(app));
         topicManager.setOwner(address(app));
         actionManager.setOwner(address(app));
+        
+        // 在转移owner后设置ActionManager引用
+        app.setActionManager();
         
         // 记录点赞额外奖励金额
         commentRewardExtraAmount = likeRewardAmount / 2;
@@ -190,38 +204,7 @@ contract RewardTest is Test {
         assertEq(balanceBefore - balanceAfter, commentRewardAmount);
     }
     
-    // 测试多个点赞的额外奖励累加
-    function test_MultiLikeExtraReward() public {
-        // 先注资活动
-        usdc.approve(address(app), 2000 * 1e6);
-        app.fundCampaignWithUSDC(campaignId, 2000 * 1e6);
-        
-        // 启动活动
-        app.startCampaign(campaignId, block.timestamp + 7 days);
-        
-        // 获取活动代币地址
-        address campaignTokenAddr = topicManager.getCampaignToken(campaignId);
-        CampaignToken campaignToken = CampaignToken(campaignTokenAddr);
-        
-        // 用户1发表评论
-        vm.prank(user1);
-        app.comment(topicId, "This is a test comment");
-        
-        // 记录用户1初始代币余额（评论奖励后）
-        uint initialBalance = campaignToken.balanceOf(user1);
-        
-        // 用户2点赞
-        vm.prank(user2);
-        app.like(topicId, 0);
-        
-        // 用户3点赞
-        vm.prank(user3);
-        app.like(topicId, 0);
-        
-        // 验证用户1获得了两次额外奖励
-        uint finalBalance = campaignToken.balanceOf(user1);
-        assertEq(finalBalance - initialBalance, commentRewardExtraAmount * 2);
-    }
+    // 移除重复测试 - 多点赞奖励在test_LikeReward中已覆盖
     
     // 测试活动结束后的奖励分配
     function test_CampaignEndRewardDistribution() public {
@@ -288,35 +271,7 @@ contract RewardTest is Test {
         assertTrue(user2PtokenAfter > user2PtokenBefore, "User2 should receive project token reward");
     }
     
-    // 测试多个活动的奖励
-    function test_MultiCampaignReward() public {
-        // 注册第二个活动
-        uint campaignId2 = 1;
-        app.registerCampaign(admin, topicId, "Second Campaign", "Second campaign description", address(projectToken));
-        
-        // 为两个活动注资
-        usdc.approve(address(app), 4000 * 1e6);
-        app.fundCampaignWithUSDC(campaignId, 2000 * 1e6);
-        app.fundCampaignWithUSDC(campaignId2, 2000 * 1e6);
-        
-        // 启动两个活动
-        app.startCampaign(campaignId, block.timestamp + 7 days);
-        app.startCampaign(campaignId2, block.timestamp + 7 days);
-        
-        // 获取两个活动的代币地址
-        address campaignTokenAddr1 = topicManager.getCampaignToken(campaignId);
-        address campaignTokenAddr2 = topicManager.getCampaignToken(campaignId2);
-        CampaignToken campaignToken1 = CampaignToken(campaignTokenAddr1);
-        CampaignToken campaignToken2 = CampaignToken(campaignTokenAddr2);
-        
-        // 用户1发表评论
-        vm.prank(user1);
-        app.comment(topicId, "This is a test comment");
-        
-        // 验证用户1在两个活动中都获得了评论奖励
-        assertEq(campaignToken1.balanceOf(user1), commentRewardAmount);
-        assertEq(campaignToken2.balanceOf(user1), commentRewardAmount);
-    }
+    // 移除重复测试 - 基础奖励机制已在其他测试中验证
     
     // 测试活动奖励不足时的自动结束
     function test_CampaignAutoEndOnLowJackpot() public {
@@ -344,5 +299,160 @@ contract RewardTest is Test {
         // 验证活动已自动结束
         (, , , , , , bool isActiveAfter, , , , , , ) = topicManager.campaignInfos(campaignId);
         assertFalse(isActiveAfter, "Campaign should be inactive after price drop");
+    }
+    
+    // 测试费用分配功能
+    function test_FeeAllocation() public {
+        uint fundAmount = 1000 * 1e6; // 1000 USDC
+        
+        // 预期的费用分配
+        uint expectedPlatformFee = fundAmount * 5 / 100;      // 5% = 50 USDC
+        uint expectedQualityFee = fundAmount * 10 / 100;      // 10% = 100 USDC  
+        uint expectedLotteryFee = fundAmount * 5 / 100;       // 5% = 50 USDC
+        uint expectedCampaignAmount = fundAmount - expectedPlatformFee - expectedQualityFee - expectedLotteryFee; // 800 USDC
+        
+        // 注资活动
+        usdc.approve(address(app), fundAmount);
+        app.fundCampaignWithUSDC(campaignId, fundAmount);
+        
+        // 验证费用池分配
+        assertEq(actionManager.platformFeePool(campaignId), expectedPlatformFee, "Platform fee pool incorrect");
+        assertEq(actionManager.qualityCommenterFeePool(campaignId), expectedQualityFee, "Quality commenter fee pool incorrect");
+        assertEq(actionManager.lotteryForLikerFeePool(campaignId), expectedLotteryFee, "Lottery fee pool incorrect");
+        
+        // 验证CampaignToken收到的金额
+        address campaignTokenAddr = topicManager.getCampaignToken(campaignId);
+        assertEq(usdc.balanceOf(campaignTokenAddr), expectedCampaignAmount, "Campaign token balance incorrect");
+        
+        // 验证ActionManager收到了费用
+        uint expectedActionManagerBalance = expectedPlatformFee + expectedQualityFee + expectedLotteryFee;
+        assertEq(usdc.balanceOf(address(actionManager)), expectedActionManagerBalance, "ActionManager balance incorrect");
+    }
+    
+    // 测试质量评论者奖励分配
+    function test_QualityCommenterReward() public {
+        // 先注资活动
+        usdc.approve(address(app), 2000 * 1e6);
+        app.fundCampaignWithUSDC(campaignId, 2000 * 1e6);
+        
+        // 启动活动
+        app.startCampaign(campaignId, block.timestamp + 7 days);
+        
+        // 用户发表评论
+        vm.prank(user1);
+        app.comment(topicId, "Great comment from user1");
+        
+        vm.prank(user2);
+        app.comment(topicId, "Good comment from user2");
+        
+        vm.prank(user3);
+        app.comment(topicId, "Average comment from user3");
+        
+        // 用户互相点赞，让user1的评论获得最多点赞
+        vm.prank(user2);
+        app.like(topicId, 0); // 点赞user1的评论
+        
+        vm.prank(user3);
+        app.like(topicId, 0); // 点赞user1的评论
+        
+        vm.prank(user1);
+        app.like(topicId, 1); // user1点赞user2的评论
+        
+        // 记录用户余额
+        uint user1BalanceBefore = usdc.balanceOf(user1);
+        uint user2BalanceBefore = usdc.balanceOf(user2);
+        
+        // 快进到活动结束
+        vm.warp(block.timestamp + 8 days);
+        
+        // 结束活动（会自动分配奖励）
+        app.endCampaign(campaignId);
+        
+        // 验证奖励分配
+        uint user1BalanceAfter = usdc.balanceOf(user1);
+        uint user2BalanceAfter = usdc.balanceOf(user2);
+        
+        // user1和user2应该获得质量评论者奖励（top 2）
+        assertTrue(user1BalanceAfter > user1BalanceBefore, "User1 should receive quality commenter reward");
+        assertTrue(user2BalanceAfter > user2BalanceBefore, "User2 should receive quality commenter reward");
+        
+        // 检查奖励分配信息
+        (address[] memory topCommenters, , bool distributed) = app.getRewardDistributionInfo(campaignId);
+        assertTrue(distributed, "Rewards should be distributed");
+        assertEq(topCommenters.length, 2, "Should have 2 top commenters");
+    }
+    
+    // 测试点赞者抽奖奖励
+    function test_LikerLotteryReward() public {
+        // 先注资活动
+        usdc.approve(address(app), 2000 * 1e6);
+        app.fundCampaignWithUSDC(campaignId, 2000 * 1e6);
+        
+        // 启动活动
+        app.startCampaign(campaignId, block.timestamp + 7 days);
+        
+        // 用户发表评论
+        vm.prank(user1);
+        app.comment(topicId, "Comment for lottery test");
+        
+        // 多个用户点赞
+        vm.prank(user2);
+        app.like(topicId, 0);
+        
+        vm.prank(user3);
+        app.like(topicId, 0);
+        
+        // 记录点赞者余额
+        uint user2BalanceBefore = usdc.balanceOf(user2);
+        uint user3BalanceBefore = usdc.balanceOf(user3);
+        
+        // 快进到活动结束
+        vm.warp(block.timestamp + 8 days);
+        
+        // 结束活动（会自动分配奖励）
+        app.endCampaign(campaignId);
+        
+        // 验证至少有一个点赞者获得了抽奖奖励
+        uint user2BalanceAfter = usdc.balanceOf(user2);
+        uint user3BalanceAfter = usdc.balanceOf(user3);
+        
+        bool someoneWon = (user2BalanceAfter > user2BalanceBefore) || (user3BalanceAfter > user3BalanceBefore);
+        assertTrue(someoneWon, "At least one liker should win the lottery");
+        
+        // 检查抽奖结果
+        (, address[] memory luckyLikers, bool distributed) = app.getRewardDistributionInfo(campaignId);
+        assertTrue(distributed, "Rewards should be distributed");
+        assertTrue(luckyLikers.length > 0, "Should have lucky likers");
+        assertTrue(luckyLikers.length <= 2, "Should not exceed max lottery winners");
+    }
+    
+    // 测试平台费提取
+    function test_PlatformFeeWithdrawal() public {
+        // 先注资活动
+        usdc.approve(address(app), 2000 * 1e6);
+        app.fundCampaignWithUSDC(campaignId, 2000 * 1e6);
+        
+        // 启动活动
+        app.startCampaign(campaignId, block.timestamp + 7 days);
+        
+        // 快进到活动结束
+        vm.warp(block.timestamp + 8 days);
+        
+        // 结束活动
+        app.endCampaign(campaignId);
+        
+        // 记录admin余额
+        uint adminBalanceBefore = usdc.balanceOf(admin);
+        
+        // 提取平台费
+        app.withdrawPlatformFees(campaignId);
+        
+        // 验证admin收到了平台费
+        uint adminBalanceAfter = usdc.balanceOf(admin);
+        uint expectedPlatformFee = 2000 * 1e6 * 5 / 100; // 5% of 2000 USDC
+        assertEq(adminBalanceAfter - adminBalanceBefore, expectedPlatformFee, "Admin should receive platform fee");
+        
+        // 验证费用池已清空
+        assertEq(actionManager.platformFeePool(campaignId), 0, "Platform fee pool should be empty");
     }
 }

@@ -7,10 +7,12 @@ import {USDC} from "../src/token/USDC.sol";
 import {UserManager} from "../src/core/UserManager.sol";
 import {TopicManager} from "../src/core/TopicManager.sol";
 import {ActionManager} from "../src/core/ActionManager.sol";
+import {MockVRF} from "../src/chainlink/MockVRF.sol";
 
 contract AppTest is Test {
     App app;
     USDC usdc;
+    MockVRF mockVRF;
     address user = address(0x1);
     address user2 = address(0x2);
     address user3 = address(0x3);
@@ -21,10 +23,17 @@ contract AppTest is Test {
 
     function setUp() public {
         usdc = new USDC();
+        mockVRF = new MockVRF();
         userManager = new UserManager();
-        topicManager = new TopicManager(address(usdc));
-        actionManager = new ActionManager(address(topicManager), address(userManager), 10 * 1e18, 5 * 1e18);
-        app = new App(address(usdc), address(userManager), address(topicManager), address(actionManager));
+        topicManager = new TopicManager(
+            address(usdc),
+            5,  // 5% 平台费
+            10, // 10% 质量评论者费
+            5,  // 5% 点赞抽奖费
+            2   // top 2 评论者
+        );
+        actionManager = new ActionManager(address(topicManager), address(userManager), 10 * 1e18, 5 * 1e18, address(mockVRF));
+        app = new App(address(usdc), address(userManager), address(topicManager), address(actionManager), address(mockVRF));
         vm.prank(user);
         app.registerUser("Alice", "bio", "alice@example.com");
         vm.startPrank(admin);
@@ -33,31 +42,14 @@ contract AppTest is Test {
         vm.stopPrank();
     }
 
-    function test_AppRegisterAndComment() public {
+    function test_AppBasicCommentAndLike() public {
+        // 测试基础的评论和点赞功能
         vm.prank(user);
         app.comment(0, "hello");
-        // 只要不revert即通过
-    }
-
-    function test_AppRegisterAndLike() public {
-        vm.prank(user);
-        app.comment(0, "hello");
+        
         vm.prank(user);
         app.like(0, 0);
-    }
-
-    function test_AppCommentAndReward() public {
-        vm.prank(user);
-        app.comment(0, "hello");
-        // 奖励逻辑可在ActionManagerTest中详细测
-    }
-
-    function test_AppLikeAndReward() public {
-        vm.prank(user);
-        app.comment(0, "hello");
-        vm.prank(user);
-        app.like(0, 0);
-        // 奖励逻辑可在ActionManagerTest中详细测
+        // 基础功能测试，详细逻辑在ActionManagerTest中
     }
 
     function test_AppPermissionControl() public {
@@ -117,123 +109,11 @@ contract AppTest is Test {
     }
 
     // 测试新增的查询功能
-    function test_AppGetUserRecentComments() public {
-        // 用户发表3个评论
-        vm.startPrank(user);
-        app.comment(0, "comment1");
-        app.comment(0, "comment2");
-        app.comment(0, "comment3");
-        vm.stopPrank();
-        
-        // 获取用户最近2个评论
-        uint[] memory recentComments = app.getUserRecentComments(user, 2);
-        assertEq(recentComments.length, 2);
-        assertEq(recentComments[0], 2); // 最新的评论ID
-        assertEq(recentComments[1], 1); // 第二新的评论ID
-    }
+    // 移除重复测试 - 用户查询功能在ActionManager.t.sol中已详细测试
 
-    function test_AppGetUserRecentLikes() public {
-        // 注册第二个用户
-        address user2 = address(0x2);
-        vm.prank(user2);
-        app.registerUser("Bob", "bio", "bob@example.com");
-        
-        // 用户发表评论
-        vm.prank(user);
-        app.comment(0, "comment1");
-        vm.prank(user);
-        app.comment(0, "comment2");
-        
-        // user2点赞这些评论
-        vm.prank(user2);
-        app.like(0, 0);
-        vm.prank(user2);
-        app.like(0, 1);
-        
-        // 获取user2最近的点赞
-        uint[] memory recentLikes = app.getUserRecentLikes(user2, 2);
-        assertEq(recentLikes.length, 2);
-        assertEq(recentLikes[0], 1); // 最新的点赞ID
-        assertEq(recentLikes[1], 0); // 第二新的点赞ID
-    }
+    // 移除重复测试 - 点赞排序功能在ActionManager.t.sol中已详细测试
 
-    function test_AppGetMostLikedComments() public {
-        // 注册多个用户
-        address user2 = address(0x2);
-        address user3 = address(0x3);
-        vm.prank(user2);
-        app.registerUser("Bob", "bio", "bob@example.com");
-        vm.prank(user3);
-        app.registerUser("Charlie", "bio", "charlie@example.com");
-        
-        // 用户发表评论
-        vm.prank(user);
-        app.comment(0, "comment1");
-        vm.prank(user);
-        app.comment(0, "comment2");
-        
-        // 给评论不同数量的点赞
-        // comment0: 2个点赞
-        vm.prank(user2);
-        app.like(0, 0);
-        vm.prank(user3);
-        app.like(0, 0);
-        
-        // comment1: 1个点赞
-        vm.prank(user2);
-        app.like(0, 1);
-        
-        // 获取最多点赞的评论
-        uint[] memory mostLiked = app.getMostLikedComments(2);
-        assertEq(mostLiked.length, 2);
-        assertEq(mostLiked[0], 0); // comment0有2个点赞，排第一
-        assertEq(mostLiked[1], 1); // comment1有1个点赞，排第二
-    }
-
-    function test_AppGetMostLikedCommentsPaginated() public {
-        // 注册第二个用户
-        address user2 = address(0x2);
-        vm.prank(user2);
-        app.registerUser("Bob", "bio", "bob@example.com");
-        
-        // 用户发表3个评论
-        vm.startPrank(user);
-        app.comment(0, "comment1");
-        app.comment(0, "comment2");
-        app.comment(0, "comment3");
-        vm.stopPrank();
-        
-        // 给评论不同数量的点赞
-        vm.prank(user2);
-        app.like(0, 2); // comment2: 1个点赞
-        
-        // 测试分页查询
-        uint[] memory page1 = app.getMostLikedCommentsPaginated(0, 2);
-        assertEq(page1.length, 2);
-        assertEq(page1[0], 2); // comment2有1个点赞，排第一
-        
-        uint[] memory page2 = app.getMostLikedCommentsPaginated(1, 2);
-        assertEq(page2.length, 2);
-        // 后面两个评论都是0个点赞
-    }
-
-    function test_AppGetValidCommentsCount() public {
-        // 用户发表2个评论
-        vm.prank(user);
-        app.comment(0, "comment1");
-        vm.prank(user);
-        app.comment(0, "comment2");
-        
-        // 验证评论总数
-        assertEq(app.getValidCommentsCount(), 2);
-        
-        // 删除一个评论
-        vm.prank(user);
-        app.deleteComment(0);
-        
-        // 验证删除后的总数
-        assertEq(app.getValidCommentsCount(), 1);
-    }
+    // 移除重复测试 - 此功能在ActionManager.t.sol中已测试
 
     function test_AppGetCommentDetails() public {
         // 用户发表评论
@@ -303,7 +183,6 @@ contract AppTest is Test {
 
     function test_AppPermissionControlForDeleteComment() public {
         // 注册第二个用户
-        address user2 = address(0x2);
         vm.prank(user2);
         app.registerUser("Bob", "bio", "bob@example.com");
         

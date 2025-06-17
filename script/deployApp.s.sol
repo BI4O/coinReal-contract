@@ -8,6 +8,7 @@ import {USDC} from "../src/token/USDC.sol";
 import {UserManager} from "../src/core/UserManager.sol";
 import {TopicManager} from "../src/core/TopicManager.sol";
 import {ActionManager} from "../src/core/ActionManager.sol";
+import {MockVRF} from "../src/chainlink/MockVRF.sol";
 
 contract DeployApp is Script {
     UserManager public userManager;
@@ -22,18 +23,29 @@ contract DeployApp is Script {
         USDC usdc = new USDC();
         console.log("USDC deployed at:", address(usdc));
 
+        // 部署MockVRF
+        MockVRF mockVRF = new MockVRF();
+        console.log("MockVRF deployed at:", address(mockVRF));
+
         // 部署UserManager
         userManager = new UserManager();
 
-        // 部署TopicManager，传入owner和usdc地址
-        topicManager = new TopicManager(address(usdc));
+        // 部署TopicManager，传入费用分配参数
+        topicManager = new TopicManager(
+            address(usdc),
+            5,  // 5% 平台费
+            10, // 10% 质量评论者费
+            5,  // 5% 点赞抽奖费
+            2   // top 2 评论者
+        );
 
         // 部署ActionManager
         actionManager = new ActionManager(
             address(topicManager), 
             address(userManager), 
             10 * 1e18, 
-            5 * 1e18);
+            5 * 1e18,
+            address(mockVRF));
 
         // 设置owner
         userManager.setOwner(deployer);
@@ -45,7 +57,8 @@ contract DeployApp is Script {
             address(usdc), 
             address(userManager), 
             address(topicManager), 
-            address(actionManager)
+            address(actionManager),
+            address(mockVRF)
         );
         console.log("App deployed at:", address(app));
 

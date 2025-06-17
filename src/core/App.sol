@@ -7,6 +7,7 @@ import "./ActionManager.sol";
 import {USDC} from "../token/USDC.sol";
 import {ProjectToken} from "../token/ProjectToken.sol";
 import {CampaignFactory} from "../token/CampaignFactory.sol";
+import {MockVRF} from "../chainlink/MockVRF.sol";
 
 contract App {
     // 使用组合模式而不是继承
@@ -16,6 +17,7 @@ contract App {
     USDC public usdc;
     ProjectToken public projectToken;
     CampaignFactory public campaignFactory;
+    MockVRF public mockVRF;
     
     // 权限控制
     address public owner;
@@ -34,13 +36,20 @@ contract App {
         address _usdcAddr,
         address _userManager,
         address _topicManager,
-        address _actionManager
+        address _actionManager,
+        address _mockVRFAddr
     ) {
         owner = msg.sender;
         usdc = USDC(_usdcAddr);
         userManager = UserManager(_userManager);
         topicManager = TopicManager(_topicManager);
         actionManager = ActionManager(_actionManager);
+        mockVRF = MockVRF(_mockVRFAddr);
+    }
+    
+    // 设置ActionManager引用（需要在转移owner后调用）
+    function setActionManager() public onlyAdmin {
+        topicManager.setActionManager(address(actionManager));
     }
     
     // 注册用户
@@ -72,19 +81,19 @@ contract App {
 
     // 活动注资
     function fundCampaignWithUSDC(uint _campaignId, uint _amount) public {
-        // 获取CampaignToken地址
-        address campaignTokenAddr = topicManager.getCampaignToken(_campaignId);
-        // 直接从调用者转账USDC到CampaignToken合约
-        usdc.transferFrom(msg.sender, campaignTokenAddr, _amount);
+        // 先将USDC转到App合约，然后由TopicManager处理费用分配
+        usdc.transferFrom(msg.sender, address(this), _amount);
+        usdc.approve(address(topicManager), _amount);
+        topicManager.fundCampaignWithUSDC(_campaignId, _amount);
     }
 
     // 活动注资
     function fundCampaignWithProjectToken(uint _campaignId, uint _amount) public {
-        // 获取CampaignToken地址和项目代币地址
-        address campaignTokenAddr = topicManager.getCampaignToken(_campaignId);
+        // 先将项目代币转到App合约，然后由TopicManager处理
         ProjectToken ptoken = ProjectToken(topicManager.getCampaignInfo(_campaignId).projectTokenAddr);
-        // 直接从调用者转账项目代币到CampaignToken合约
-        ptoken.transferFrom(msg.sender, campaignTokenAddr, _amount);
+        ptoken.transferFrom(msg.sender, address(this), _amount);
+        ptoken.approve(address(topicManager), _amount);
+        topicManager.fundCampaignWithProjectToken(_campaignId, _amount);
     }
 
     // 活动开始
@@ -194,5 +203,25 @@ contract App {
     // 删除评论（只有评论作者可以）
     function deleteComment(uint _commentId) public onlyRegisteredUser {
         actionManager.deleteCommentByUser(_commentId, msg.sender);
+    }
+    
+    // 提取平台费用（只有管理员可以）
+    function withdrawPlatformFees(uint _campaignId) public onlyAdmin {
+        // 先提取到App合约
+        topicManager.withdrawPlatformFee(_campaignId);
+        // 然后转账给App的owner
+        uint balance = usdc.balanceOf(address(this));
+        if (balance > 0) {
+            usdc.transfer(owner, balance);
+        }
+    }
+    
+    // 查询活动的奖励分配状态
+    function getRewardDistributionInfo(uint _campaignId) public view returns (
+        address[] memory topCommenters,
+        address[] memory luckyLikers,
+        bool distributed
+    ) {
+        return topicManager.getRewardDistributionInfo(_campaignId);
     }
 }
