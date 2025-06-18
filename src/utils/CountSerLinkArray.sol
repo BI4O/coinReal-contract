@@ -5,6 +5,7 @@ pragma solidity ^0.8.20;
  * @title CountSerLinkArray
  * @dev 点赞数序列双向链表，维护评论按点赞数的全局排序
  * 支持从两端遍历：头部是最多点赞，尾部是最少点赞
+ * 优化版本：使用有序插入，避免全量重建和排序
  */
 contract CountSerLinkArray {
     // 链表结束标记
@@ -32,9 +33,6 @@ contract CountSerLinkArray {
     // 节点数据 [commentId] => CountNode
     mapping(uint => CountNode) public countNodes;
     
-    // 所有评论ID的数组，用于重建链表
-    uint[] private allCommentIds;
-    
     /**
      * @dev 添加新评论到链表尾部（0点赞）
      * @param commentId 评论ID
@@ -46,17 +44,12 @@ contract CountSerLinkArray {
         newNode.likeCount = 0;
         newNode.isDeleted = false;
         newNode.exists = true;
-        newNode.prev = NULL_NODE;
-        newNode.next = NULL_NODE;
-        
-        // 添加到数组中
-        allCommentIds.push(commentId);
         
         totalSize++;
         validSize++;
         
-        // 重建链表
-        _rebuildList();
+        // 直接插入到链表尾部（0点赞应该在最后）
+        _insertAtTail(commentId);
     }
     
     /**
@@ -75,11 +68,13 @@ contract CountSerLinkArray {
             return;
         }
         
-        // 更新点赞数
         node.likeCount = newLikeCount;
         
-        // 重建链表
-        _rebuildList();
+        // 从当前位置移除节点
+        _removeFromList(commentId);
+        
+        // 重新插入到正确位置
+        _insertInOrder(commentId);
     }
     
     /**
@@ -92,8 +87,10 @@ contract CountSerLinkArray {
         
         countNodes[commentId].isDeleted = true;
         
-        // 重建链表以移除已删除的评论
-        _rebuildList();
+        // 从链表中移除
+        _removeFromList(commentId);
+        
+        validSize--;
     }
     
     /**
@@ -143,68 +140,113 @@ contract CountSerLinkArray {
     }
     
     /**
-     * @dev 重建整个链表，按点赞数降序排列
+     * @dev 插入节点到链表尾部
+     * @param commentId 评论ID
      */
-    function _rebuildList() private {
-        if (allCommentIds.length == 0) {
-            globalHead = 0;
-            globalTail = 0;
+    function _insertAtTail(uint commentId) private {
+        CountNode storage newNode = countNodes[commentId];
+        
+        if (validSize == 1) {
+            // 第一个节点
+            globalHead = commentId;
+            globalTail = commentId;
+            newNode.prev = NULL_NODE;
+            newNode.next = NULL_NODE;
+        } else {
+            // 插入到尾部
+            CountNode storage oldTail = countNodes[globalTail];
+            oldTail.next = commentId;
+            newNode.prev = globalTail;
+            newNode.next = NULL_NODE;
+            globalTail = commentId;
+        }
+    }
+    
+    /**
+     * @dev 按点赞数有序插入节点
+     * @param commentId 评论ID
+     */
+    function _insertInOrder(uint commentId) private {
+        CountNode storage newNode = countNodes[commentId];
+        uint newLikeCount = newNode.likeCount;
+        
+        if (validSize == 0) {
+            // 空链表
+            globalHead = commentId;
+            globalTail = commentId;
+            newNode.prev = NULL_NODE;
+            newNode.next = NULL_NODE;
             return;
         }
         
-        // 创建临时数组存储有效的评论ID
-        uint[] memory validIds = new uint[](allCommentIds.length);
-        uint validCount = 0;
+        // 从头部开始查找插入位置
+        uint current = globalHead;
         
-        // 过滤已删除的评论
-        for (uint i = 0; i < allCommentIds.length; i++) {
-            if (!countNodes[allCommentIds[i]].isDeleted) {
-                validIds[validCount] = allCommentIds[i];
-                validCount++;
-            }
+        // 如果新节点点赞数最多，插入到头部
+        if (newLikeCount >= countNodes[current].likeCount) {
+            newNode.next = globalHead;
+            newNode.prev = NULL_NODE;
+            countNodes[globalHead].prev = commentId;
+            globalHead = commentId;
+            return;
         }
         
-        if (validCount == 0) {
+        // 查找插入位置
+        while (current != NULL_NODE) {
+            CountNode storage currentNode = countNodes[current];
+            
+            if (newLikeCount >= currentNode.likeCount) {
+                // 插入到current之前
+                newNode.next = current;
+                newNode.prev = currentNode.prev;
+                
+                if (currentNode.prev != NULL_NODE) {
+                    countNodes[currentNode.prev].next = commentId;
+                } else {
+                    globalHead = commentId;
+                }
+                currentNode.prev = commentId;
+                return;
+            }
+            
+            current = currentNode.next;
+        }
+        
+        // 插入到尾部
+        CountNode storage oldTail = countNodes[globalTail];
+        oldTail.next = commentId;
+        newNode.prev = globalTail;
+        newNode.next = NULL_NODE;
+        globalTail = commentId;
+    }
+    
+    /**
+     * @dev 从链表中移除节点
+     * @param commentId 评论ID
+     */
+    function _removeFromList(uint commentId) private {
+        CountNode storage node = countNodes[commentId];
+        
+        // 更新前一个节点的next指针
+        if (node.prev != NULL_NODE) {
+            countNodes[node.prev].next = node.next;
+        } else {
+            // 这是头节点
+            globalHead = node.next;
+        }
+        
+        // 更新后一个节点的prev指针
+        if (node.next != NULL_NODE) {
+            countNodes[node.next].prev = node.prev;
+        } else {
+            // 这是尾节点
+            globalTail = node.prev;
+        }
+        
+        // 如果删除后链表为空，重置头尾指针
+        if (validSize == 1) {
             globalHead = NULL_NODE;
             globalTail = NULL_NODE;
-            validSize = 0;
-            return;
-        }
-        
-        // 更新有效大小
-        validSize = validCount;
-        
-        // 使用冒泡排序按点赞数降序排列
-        for (uint i = 0; i < validCount - 1; i++) {
-            for (uint j = 0; j < validCount - i - 1; j++) {
-                if (countNodes[validIds[j]].likeCount < countNodes[validIds[j + 1]].likeCount) {
-                    uint temp = validIds[j];
-                    validIds[j] = validIds[j + 1];
-                    validIds[j + 1] = temp;
-                }
-            }
-        }
-        
-        // 重建链表指针
-        for (uint i = 0; i < validCount; i++) {
-            uint commentId = validIds[i];
-            CountNode storage node = countNodes[commentId];
-            
-            if (i == 0) {
-                // 第一个节点
-                node.prev = NULL_NODE;
-                globalHead = commentId;
-            } else {
-                node.prev = validIds[i - 1];
-            }
-            
-            if (i == validCount - 1) {
-                // 最后一个节点
-                node.next = NULL_NODE;
-                globalTail = commentId;
-            } else {
-                node.next = validIds[i + 1];
-            }
         }
     }
     
@@ -223,15 +265,10 @@ contract CountSerLinkArray {
         uint current = globalHead;
         uint index = 0;
         
-        // 添加循环检测
-        uint steps = 0;
-        uint maxSteps = validSize + 1; // 最多应该走validSize步
-        
-        while (current != NULL_NODE && index < count && steps < maxSteps) {
+        while (current != NULL_NODE && index < count) {
             result[index] = current;
             index++;
             current = countNodes[current].next;
-            steps++;
         }
         
         return result;
@@ -275,35 +312,22 @@ contract CountSerLinkArray {
         uint current = globalHead;
         uint validIndex = 0;
         
-        // 跳过startIndex个有效评论
+        // 跳过startIndex个评论
         while (current != NULL_NODE && validIndex < startIndex) {
-            if (!countNodes[current].isDeleted) {
-                validIndex++;
-            }
+            validIndex++;
             current = countNodes[current].next;
         }
         
-        // 收集length个有效评论
+        // 收集length个评论
         uint remaining = validSize - startIndex;
         uint count = length < remaining ? length : remaining;
         uint[] memory result = new uint[](count);
         uint index = 0;
         
         while (current != NULL_NODE && index < count) {
-            if (!countNodes[current].isDeleted) {
-                result[index] = current;
-                index++;
-            }
+            result[index] = current;
+            index++;
             current = countNodes[current].next;
-        }
-        
-        // 调整数组大小
-        if (index < count) {
-            uint[] memory adjustedResult = new uint[](index);
-            for (uint i = 0; i < index; i++) {
-                adjustedResult[i] = result[i];
-            }
-            return adjustedResult;
         }
         
         return result;
@@ -323,35 +347,22 @@ contract CountSerLinkArray {
         uint current = globalTail;
         uint validIndex = 0;
         
-        // 跳过startIndex个有效评论
+        // 跳过startIndex个评论
         while (current != NULL_NODE && validIndex < startIndex) {
-            if (!countNodes[current].isDeleted) {
-                validIndex++;
-            }
+            validIndex++;
             current = countNodes[current].prev;
         }
         
-        // 收集length个有效评论
+        // 收集length个评论
         uint remaining = validSize - startIndex;
         uint count = length < remaining ? length : remaining;
         uint[] memory result = new uint[](count);
         uint index = 0;
         
         while (current != NULL_NODE && index < count) {
-            if (!countNodes[current].isDeleted) {
-                result[index] = current;
-                index++;
-            }
+            result[index] = current;
+            index++;
             current = countNodes[current].prev;
-        }
-        
-        // 调整数组大小
-        if (index < count) {
-            uint[] memory adjustedResult = new uint[](index);
-            for (uint i = 0; i < index; i++) {
-                adjustedResult[i] = result[i];
-            }
-            return adjustedResult;
         }
         
         return result;

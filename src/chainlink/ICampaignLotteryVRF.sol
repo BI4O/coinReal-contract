@@ -89,7 +89,11 @@ interface ICampaignLotteryVRF {
     /**
      * @dev 查询活动抽奖信息
      * @param campaignId 活动ID
-     * @return 返回活动抽奖信息结构体
+     * @return isRequested 是否已请求抽奖
+     * @return fulfilled 抽奖是否已完成
+     * @return maxRange 随机数范围上限
+     * @return count 需要选择的幸运者数量
+     * @return luckyIds 幸运ID列表
      */
     function campaignLotteries(uint256 campaignId) 
         external 
