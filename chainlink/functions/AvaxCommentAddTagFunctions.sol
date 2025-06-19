@@ -12,9 +12,9 @@ import {FunctionsRequest} from "@chainlink/contracts@1.4.0/src/v0.8/functions/v1
 
  /*
  这个合约已经部署在了sepolia，不需要用foundry来部署
- 而且现在已经有10LINK代币的余额，可以直接用
+ 而且现在已经有80LINK代币的余额，可以直接用
 
- 地址：0x590F906E2E389F114DDc06E79030caB53242b665
+ 地址：0x8a000e20bEc0c5627B5898376A8f6FEfCf79baC9
  Owner：0x802f71cBf691D4623374E8ec37e32e26d5f74d87
  只有Owner才可以reset，所以注意app的owner也用这个才行
  */ 
@@ -25,6 +25,16 @@ import {FunctionsRequest} from "@chainlink/contracts@1.4.0/src/v0.8/functions/v1
  * @dev 通过AI分析评论情感并存储结果
  */
 contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
+    
+    // Router address - Hardcoded for sepolia
+    address router = 0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
+
+    // donID - Hardcoded for Sepolia
+    bytes32 donID = 0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
+
+    // Gas限制设置
+    uint32 gasLimit = 300000;
+
     using FunctionsRequest for FunctionsRequest.Request;
 
     // 状态变量
@@ -58,35 +68,48 @@ contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
     event CommentTagReset(uint indexed commentId);
     event AllTagsReset();
 
-    // Router address - Hardcoded for Sepolia
-    address router = 0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
-
-    // 成功的AI JavaScript代码 - 简化且有效
+    // 成功的AI JavaScript代码 - 使用CommentAddTag.js中的代码
     string constant AI_SOURCE = 
-        "const comment = args[0];"
-        "const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyDAxxv2iq4miqPHqXxLqwyOYTXubQWdLKQ';"
-        "const body = JSON.stringify({"
-        "  contents: [{ parts: [{ text: 'Classify this crypto comment as POS, NEG, or NEU: ' + comment }] }]"
-        "});"
+        "const promptText = args[0];"
+        "const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyDAxxv2iq4miqPHqXxLqwyOYTXubQWdLKQ`;"
+        "const body = {"
+        "  system_instruction: {"
+        "    parts: ["
+        "      {"
+        "        text: 'Classify crypto sentiment: POS for positive/bullish, NEG for negative/bearish, NEU for neutral. Output only: POS, NEG, or NEU'"
+        "      }"
+        "    ]"
+        "  },"
+        "  contents: ["
+        "    {"
+        "      parts: ["
+        "        {"
+        "          text: promptText"
+        "        }"
+        "      ]"
+        "    }"
+        "  ],"
+        "  generationConfig: {"
+        "    thinkingConfig: {"
+        "      thinkingBudget: 0"
+        "    }"
+        "  }"
+        "};"
         "try {"
         "  const response = await Functions.makeHttpRequest({"
         "    url: url,"
         "    method: 'POST',"
-        "    headers: { 'Content-Type': 'application/json' },"
+        "    headers: {"
+        "      'Content-Type': 'application/json'"
+        "    },"
         "    data: body"
         "  });"
         "  if (response.error) return Functions.encodeString('NEU');"
-        "  const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || 'NEU';"
-        "  return Functions.encodeString(text.includes('POS') ? 'POS' : text.includes('NEG') ? 'NEG' : 'NEU');"
+        "  const resultText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? 'NEU';"
+        "  return Functions.encodeString(resultText);"
         "} catch (e) {"
         "  return Functions.encodeString('NEU');"
         "}";
-
-    // Gas限制设置
-    uint32 gasLimit = 300000;
-
-    // donID - Hardcoded for Sepolia
-    bytes32 donID = 0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
 
     /**
      * @notice 初始化合约
@@ -159,10 +182,17 @@ contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
         // 解析并存储分析结果
         if (err.length == 0 && response.length > 0) {
             string memory tag = string(response);
-            commentTags[commentId] = tag;
+            // 验证返回的标签是否有效（POS、NEG或NEU）
+            if (keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("POS")) ||
+                keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("NEG")) ||
+                keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("NEU"))) {
+                commentTags[commentId] = tag;
+            } else {
+                // 如果返回了未知标签，设置为NEU
+                commentTags[commentId] = "NEU";
+            }
             isCommentAnalyzed[commentId] = true;
-            
-            emit TagAnalysisCompleted(commentId, tag, requestId);
+            emit TagAnalysisCompleted(commentId, commentTags[commentId], requestId);
         }
 
         // 清理映射

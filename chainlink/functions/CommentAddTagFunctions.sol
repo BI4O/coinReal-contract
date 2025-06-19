@@ -12,9 +12,9 @@ import {FunctionsRequest} from "@chainlink/contracts@1.4.0/src/v0.8/functions/v1
 
  /*
  这个合约已经部署在了sepolia，不需要用foundry来部署
- 而且现在已经有10LINK代币的余额，可以直接用
+ 而且现在已经有80LINK代币的余额，可以直接用
 
- 地址：0x590F906E2E389F114DDc06E79030caB53242b665
+ 地址：0x8a000e20bEc0c5627B5898376A8f6FEfCf79baC9
  Owner：0x802f71cBf691D4623374E8ec37e32e26d5f74d87
  只有Owner才可以reset，所以注意app的owner也用这个才行
  */ 
@@ -25,6 +25,16 @@ import {FunctionsRequest} from "@chainlink/contracts@1.4.0/src/v0.8/functions/v1
  * @dev 通过AI分析评论情感并存储结果
  */
 contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
+    
+    // Router address - Hardcoded for sepolia
+    address router = 0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
+
+    // donID - Hardcoded for Sepolia
+    bytes32 donID = 0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
+
+    // Gas限制设置
+    uint32 gasLimit = 300000;
+
     using FunctionsRequest for FunctionsRequest.Request;
 
     // 状态变量
@@ -58,37 +68,48 @@ contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
     event CommentTagReset(uint indexed commentId);
     event AllTagsReset();
 
-    // Router address - Hardcoded for Sepolia
-    address router = 0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
-
-    // 成功的AI JavaScript代码 - 修改为只返回POS、NEG或ERROR
+    // 成功的AI JavaScript代码 - 使用CommentAddTag.js中的代码
     string constant AI_SOURCE = 
-        "const comment = args[0];"
-        "const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyDAxxv2iq4miqPHqXxLqwyOYTXubQWdLKQ';"
-        "const body = JSON.stringify({"
-        "  contents: [{ parts: [{ text: 'Classify this crypto comment as either POS (positive) or NEG (negative). Only respond with POS or NEG: ' + comment }] }]"
-        "});"
+        "const promptText = args[0];"
+        "const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=AIzaSyDAxxv2iq4miqPHqXxLqwyOYTXubQWdLKQ`;"
+        "const body = {"
+        "  system_instruction: {"
+        "    parts: ["
+        "      {"
+        "        text: 'Classify crypto sentiment: POS for positive/bullish, NEG for negative/bearish, NEU for neutral. Output only: POS, NEG, or NEU'"
+        "      }"
+        "    ]"
+        "  },"
+        "  contents: ["
+        "    {"
+        "      parts: ["
+        "        {"
+        "          text: promptText"
+        "        }"
+        "      ]"
+        "    }"
+        "  ],"
+        "  generationConfig: {"
+        "    thinkingConfig: {"
+        "      thinkingBudget: 0"
+        "    }"
+        "  }"
+        "};"
         "try {"
         "  const response = await Functions.makeHttpRequest({"
         "    url: url,"
         "    method: 'POST',"
-        "    headers: { 'Content-Type': 'application/json' },"
+        "    headers: {"
+        "      'Content-Type': 'application/json'"
+        "    },"
         "    data: body"
         "  });"
-        "  if (response.error) return Functions.encodeString('ERROR');"
-        "  const text = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';"
-        "  if (text.includes('POS')) return Functions.encodeString('POS');"
-        "  if (text.includes('NEG')) return Functions.encodeString('NEG');"
-        "  return Functions.encodeString('ERROR');"
+        "  if (response.error) return Functions.encodeString('NEU');"
+        "  const resultText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? 'NEU';"
+        "  return Functions.encodeString(resultText);"
         "} catch (e) {"
-        "  return Functions.encodeString('ERROR');"
+        "  return Functions.encodeString('NEU');"
         "}";
-
-    // Gas限制设置
-    uint32 gasLimit = 300000;
-
-    // donID - Hardcoded for Sepolia
-    bytes32 donID = 0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
 
     /**
      * @notice 初始化合约
@@ -159,29 +180,19 @@ contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
         s_lastError = err;
 
         // 解析并存储分析结果
-        if (err.length > 0) {
-            // 如果有错误，存储ERROR标签
-            commentTags[commentId] = "ERROR";
-            isCommentAnalyzed[commentId] = true;
-            emit TagAnalysisCompleted(commentId, "ERROR", requestId);
-        } else if (response.length > 0) {
+        if (err.length == 0 && response.length > 0) {
             string memory tag = string(response);
-            // 验证返回的标签是否有效（POS、NEG或ERROR）
+            // 验证返回的标签是否有效（POS、NEG或NEU）
             if (keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("POS")) ||
                 keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("NEG")) ||
-                keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("ERROR"))) {
+                keccak256(abi.encodePacked(tag)) == keccak256(abi.encodePacked("NEU"))) {
                 commentTags[commentId] = tag;
             } else {
-                // 如果返回了未知标签，设置为ERROR
-                commentTags[commentId] = "ERROR";
+                // 如果返回了未知标签，设置为NEU
+                commentTags[commentId] = "NEU";
             }
             isCommentAnalyzed[commentId] = true;
             emit TagAnalysisCompleted(commentId, commentTags[commentId], requestId);
-        } else {
-            // 如果响应为空，设置为ERROR
-            commentTags[commentId] = "ERROR";
-            isCommentAnalyzed[commentId] = true;
-            emit TagAnalysisCompleted(commentId, "ERROR", requestId);
         }
 
         // 清理映射
@@ -192,7 +203,7 @@ contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
     /**
      * @notice 根据评论ID获取情感分析标签
      * @param commentId 评论ID
-     * @return tag 情感标签（POS/NEG/ERROR）
+     * @return tag 情感标签（POS/NEG/NEU）
      */
     function getCommentTagById(uint commentId) external view returns (string memory tag) {
         require(isCommentAnalyzed[commentId], "Comment not analyzed");
