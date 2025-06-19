@@ -1,0 +1,7 @@
+sepolia订阅信息在：https://functions.chain.link/sepolia/5044
+已经给了50个LINK作为订阅消耗
+对应的consumer：0x590f906e2e389f114ddc06e79030cab53242b665
+
+fuji订阅信息在：https://functions.chain.link/fuji/15554
+已经给了20个LINK作为订阅消耗
+对应的consumer：0x8363b1c2DEC2b792060409919328079a869774ce
