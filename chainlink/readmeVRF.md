@@ -11,6 +11,14 @@
 合约已部署在Sepolia测试网上：
 - 地址：`0xd5916F5ea735431384A66FF0F0aa09f26A3f8E04`
 - Owner：`0x802f71cBf691D4623374E8ec37e32e26d5f74d87`
+- Chainlink Functions订阅ID：`5044`
+- 当前余额：80个LINK代币
+
+fuji测试网：
+- 地址：`0x61a892422aFaa9f7fb9Fd15E1eF66B8F174FD31b`
+- Owner：`0x802f71cBf691D4623374E8ec37e32e26d5f74d87`
+- Chainlink Functions订阅ID：`15554`
+- 当前余额：20个LINK代币
 
 ### 主要功能
 
