@@ -32,7 +32,15 @@ contract AppTest is Test {
             5,  // 5% 点赞抽奖费
             2   // top 2 评论者
         );
-        actionManager = new ActionManager(address(topicManager), address(userManager), 10 * 1e18, 5 * 1e18, address(mockVRF));
+        actionManager = new ActionManager(
+            address(topicManager), 
+            address(userManager), 
+            10 * 1e18, 
+            5 * 1e18, 
+            address(mockVRF),
+            address(0), // commentTagFunctions address - 测试中使用零地址
+            5044        // functionsSubscriptionId
+        );
         app = new App(address(usdc), address(userManager), address(topicManager), address(actionManager), address(mockVRF));
         vm.prank(user);
         app.registerUser("Alice", "bio", "alice@example.com");

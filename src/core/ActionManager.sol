@@ -6,7 +6,8 @@ import {UserManager} from "./UserManager.sol";
 import {CampaignToken} from "../token/Campaign.sol";
 import {TimeSerLinkArray} from "../utils/TimeSerLinkArray.sol";
 import {CountSerLinkArray} from "../utils/CountSerLinkArray.sol";
-import {MockVRF} from "../chainlink/MockVRF.sol";
+import {ICampaignLotteryVRF} from "../chainlink/ICampaignLotteryVRF.sol";
+import {ICommentAddTagFunctions} from "../chainlink/ICommentAddTagFunctions.sol";
 import {USDC} from "../token/USDC.sol";
 
 contract ActionManager {
@@ -15,7 +16,9 @@ contract ActionManager {
     // 用来校验topic是否存在
     TopicManager public topicManager;
     UserManager public userManager;
-    MockVRF public mockVRF;
+    ICampaignLotteryVRF public vrfContract;
+    ICommentAddTagFunctions public commentTagFunctions;
+    uint64 public functionsSubscriptionId;
 
     uint public nextCommentId;
     uint public nextLikeId;
@@ -84,14 +87,18 @@ contract ActionManager {
         address _userManagerAddr,
         uint _commentRewardAmount,
         uint _likeRewardAmount,
-        address _mockVRFAddr
+        address _vrfContractAddr,
+        address _commentTagFunctionsAddr,
+        uint64 _functionsSubscriptionId
     ) {
         nextCommentId = 0;
         nextLikeId = 0;
         owner = msg.sender;
         topicManager = TopicManager(_topicManagerAddr);
         userManager = UserManager(_userManagerAddr);
-        mockVRF = MockVRF(_mockVRFAddr);
+        vrfContract = ICampaignLotteryVRF(_vrfContractAddr);
+        commentTagFunctions = ICommentAddTagFunctions(_commentTagFunctionsAddr);
+        functionsSubscriptionId = _functionsSubscriptionId;
         commentRewardAmount = _commentRewardAmount;
         likeRewardAmount = _likeRewardAmount;
         commentRewardExtraAmount = _likeRewardAmount / 2; // 设置为点赞奖励的一半
@@ -422,48 +429,53 @@ contract ActionManager {
         
         if (likers.length == 0) return;
         
-        uint qualityCommenterNum = topicManager.qualityCommenterNum();
-        // 确定抽奖人数（不超过实际点赞人数）
-        uint lotteryCount = likers.length < qualityCommenterNum ? likers.length : qualityCommenterNum;
+        // 检查VRF是否已完成抽奖
+        (bool isRequested, bool fulfilled, uint256[] memory luckyIds) = vrfContract.getCampaignLuckyIds(_campaignId);
         
-        // 使用VRF获取随机数
-        uint256 requestId = mockVRF.requestRandomWords(uint32(lotteryCount));
-        uint256[] memory randomWords = mockVRF.getRandomWords(requestId);
-        
-        address[] memory winners = new address[](lotteryCount);
-        bool[] memory selected = new bool[](likers.length);
-        
-        // 随机选择获奖者（避免重复）
-        for (uint i = 0; i < lotteryCount; i++) {
-            uint randomIndex;
-            uint attempts = 0;
-            do {
-                randomIndex = randomWords[i] % likers.length;
-                attempts++;
-                // 防止无限循环，如果尝试次数过多，就顺序选择
-                if (attempts > 100) {
-                    for (uint j = 0; j < likers.length; j++) {
-                        if (!selected[j]) {
-                            randomIndex = j;
-                            break;
-                        }
-                    }
-                    break;
-                }
-            } while (selected[randomIndex]);
+        if (!isRequested) {
+            // 如果VRF抽奖尚未请求，则触发抽奖
+            uint qualityCommenterNum = topicManager.qualityCommenterNum();
+            uint lotteryCount = likers.length < qualityCommenterNum ? likers.length : qualityCommenterNum;
             
-            selected[randomIndex] = true;
-            winners[i] = likers[randomIndex];
+            if (lotteryCount > 0) {
+                vrfContract.setLotteryByCampaignId(_campaignId, likers.length, lotteryCount, false);
+                
+                // 重新获取抽奖结果
+                (, fulfilled, luckyIds) = vrfContract.getCampaignLuckyIds(_campaignId);
+            }
+        }
+        
+        if (!fulfilled || luckyIds.length == 0) {
+            // VRF抽奖尚未完成，暂时不分配奖励
+            return;
+        }
+        
+        // 根据VRF结果获取获奖者
+        address[] memory winners = new address[](luckyIds.length);
+        uint validWinners = 0;
+        for (uint i = 0; i < luckyIds.length; i++) {
+            if (luckyIds[i] < likers.length) {
+                winners[validWinners] = likers[luckyIds[i]];
+                validWinners++;
+            }
+        }
+        
+        // 调整获奖者数组大小
+        address[] memory finalWinners = new address[](validWinners);
+        for (uint i = 0; i < validWinners; i++) {
+            finalWinners[i] = winners[i];
         }
         
         // 平分奖励
-        USDC usdc = USDC(topicManager.usdc());
-        uint rewardPerWinner = lotteryForLikerFeePool[_campaignId] / lotteryCount;
-        for (uint i = 0; i < lotteryCount; i++) {
-            usdc.transfer(winners[i], rewardPerWinner);
+        if (validWinners > 0) {
+            USDC usdc = USDC(topicManager.usdc());
+            uint rewardPerWinner = lotteryForLikerFeePool[_campaignId] / validWinners;
+            for (uint i = 0; i < validWinners; i++) {
+                usdc.transfer(finalWinners[i], rewardPerWinner);
+            }
         }
         
-        luckyLikers[_campaignId] = winners;
+        luckyLikers[_campaignId] = finalWinners;
     }
     
     // 提取平台费用
@@ -707,5 +719,226 @@ contract ActionManager {
         countSerLinkArray.deleteComment(_commentId);
 
         return true;
+    }
+
+    // ========== AI 标签功能 ==========
+
+    /**
+     * @notice 为评论添加AI情感分析标签
+     * @param commentId 评论ID
+     * @return success 请求是否成功发送
+     */
+    function addCommentAITag(uint commentId) public returns (bool) {
+        // 检查评论是否存在
+        require(commentId < nextCommentId, "Comment does not exist");
+        require(!comments[commentId].isDelete, "Comment is deleted");
+        
+        // 检查评论是否已经分析过
+        if (isCommentTagAnalyzed(commentId)) {
+            return false; // 已分析过，不重复请求
+        }
+        
+        // 调用Functions合约进行分析
+        try commentTagFunctions.addTag(commentId, comments[commentId].content, functionsSubscriptionId) returns (bytes32) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @notice 检查评论是否已完成AI情感分析
+     * @param commentId 评论ID
+     * @return analyzed 是否已分析
+     */
+    function isCommentTagAnalyzed(uint commentId) public view returns (bool) {
+        try commentTagFunctions.isAnalyzed(commentId) returns (bool analyzed) {
+            return analyzed;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @notice 获取评论的AI情感标签
+     * @param commentId 评论ID
+     * @return tag 情感标签（POS/NEG/NEU）
+     */
+    function getCommentAITag(uint commentId) public view returns (string memory) {
+        require(isCommentTagAnalyzed(commentId), "Comment not analyzed yet");
+        
+        try commentTagFunctions.getCommentTagById(commentId) returns (string memory tag) {
+            return tag;
+        } catch {
+            return "ERROR";
+        }
+    }
+
+    /**
+     * @notice 检查评论是否需要添加AI标签
+     * @param commentId 评论ID
+     * @return needsTag 是否需要添加标签
+     */
+    function checkCommentTagStatus(uint commentId) public view returns (bool) {
+        // 检查评论是否存在
+        if (commentId >= nextCommentId) {
+            return false;
+        }
+        
+        // 检查评论是否已删除
+        if (comments[commentId].isDelete) {
+            return false;
+        }
+        
+        // 检查是否已分析
+        return !isCommentTagAnalyzed(commentId);
+    }
+
+    /**
+     * @notice 设置Functions订阅ID
+     * @param _subscriptionId 新的订阅ID
+     */
+    function setFunctionsSubscriptionId(uint64 _subscriptionId) public {
+        require(msg.sender == owner, "Only owner can call this function");
+        functionsSubscriptionId = _subscriptionId;
+    }
+
+    // ========== Chainlink Automation 集成 ==========
+
+    /**
+     * @notice 检查活动是否需要执行抽奖
+     * @param campaignId 活动ID
+     * @return needsLottery 是否需要执行抽奖
+     */
+    function checkCampaignLotteryNeeded(uint256 campaignId) public view returns (bool) {
+        // 检查活动是否存在
+        if (campaignId >= topicManager.nextCampaignId()) {
+            return false;
+        }
+        
+        TopicManager.CampaignInfo memory campaignInfo = topicManager.getCampaignInfo(campaignId);
+        
+        // 检查活动是否已结束
+        if (campaignInfo.isActive || block.timestamp < campaignInfo.endTime) {
+            return false;
+        }
+        
+        // 检查是否已经抽奖
+        (bool isRequested, , ) = vrfContract.getCampaignLuckyIds(campaignId);
+        return !isRequested;
+    }
+
+    /**
+     * @notice 执行活动抽奖
+     * @param campaignId 活动ID
+     * @return success 操作是否成功
+     */
+    function performCampaignLottery(uint256 campaignId) public returns (bool) {
+        if (!checkCampaignLotteryNeeded(campaignId)) {
+            return false;
+        }
+        
+        // 获取活动参与者数量（点赞者）
+        address[] memory likers = getCampaignLikers(campaignId);
+        uint256 participantCount = likers.length;
+        
+        if (participantCount == 0) {
+            return false;
+        }
+        
+        // 执行抽奖，选择前5名或参与者数量（取较小值）
+        uint256 qualityCommenterNum = topicManager.qualityCommenterNum();
+        uint256 winnerCount = participantCount < qualityCommenterNum ? participantCount : qualityCommenterNum;
+        
+        try vrfContract.setLotteryByCampaignId(campaignId, participantCount, winnerCount, false) {
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * @notice 检查指定范围内需要添加标签的评论
+     * @param startId 起始评论ID
+     * @param endId 结束评论ID
+     * @return commentIds 需要添加标签的评论ID数组
+     */
+    function checkNewCommentsForTagging(uint256 startId, uint256 endId) public view returns (uint256[] memory) {
+        // 确保ID范围有效
+        uint256 validEndId = endId;
+        if (validEndId >= nextCommentId) {
+            validEndId = nextCommentId > 0 ? nextCommentId - 1 : 0;
+        }
+        
+        if (startId > validEndId || nextCommentId == 0) {
+            return new uint256[](0);
+        }
+        
+        // 第一次遍历计算需要标签的评论数量
+        uint256 count = 0;
+        for (uint256 i = startId; i <= validEndId; i++) {
+            if (checkCommentTagStatus(i)) {
+                count++;
+            }
+        }
+        
+        // 创建结果数组
+        uint256[] memory result = new uint256[](count);
+        
+        // 第二次遍历填充结果数组
+        uint256 index = 0;
+        for (uint256 i = startId; i <= validEndId; i++) {
+            if (checkCommentTagStatus(i)) {
+                result[index] = i;
+                index++;
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * @notice 批量为评论添加AI标签
+     * @param commentIds 评论ID数组
+     * @return successCount 成功添加标签请求的评论数量
+     */
+    function performBatchCommentTagging(uint256[] memory commentIds) public returns (uint256) {
+        uint256 successCount = 0;
+        
+        for (uint256 i = 0; i < commentIds.length; i++) {
+            if (addCommentAITag(commentIds[i])) {
+                successCount++;
+            }
+        }
+        
+        return successCount;
+    }
+
+    /**
+     * @notice 获取评论总数（用于Automation批处理）
+     * @return count 当前评论总数
+     */
+    function getCommentCounter() public view returns (uint256) {
+        return nextCommentId;
+    }
+
+    // ========== 配置管理 ==========
+
+    /**
+     * @notice 设置VRF合约地址
+     * @param _vrfContractAddr 新的VRF合约地址
+     */
+    function setVrfContract(address _vrfContractAddr) public {
+        require(msg.sender == owner, "Only owner can call this function");
+        vrfContract = ICampaignLotteryVRF(_vrfContractAddr);
+    }
+
+    /**
+     * @notice 设置评论标签Functions合约地址
+     * @param _commentTagFunctionsAddr 新的Functions合约地址
+     */
+    function setCommentTagFunctions(address _commentTagFunctionsAddr) public {
+        require(msg.sender == owner, "Only owner can call this function");
+        commentTagFunctions = ICommentAddTagFunctions(_commentTagFunctionsAddr);
     }
 } 

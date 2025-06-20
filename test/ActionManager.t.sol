@@ -29,7 +29,15 @@ contract ActionManagerTest is Test {
             5,  // 5% 点赞抽奖费
             2   // top 2 评论者
         );
-        actionManager = new ActionManager(address(topicManager), address(userManager), 10 * 1e18, 5 * 1e18, address(mockVRF));
+        actionManager = new ActionManager(
+            address(topicManager), 
+            address(userManager), 
+            10 * 1e18, 
+            5 * 1e18, 
+            address(mockVRF),
+            address(0), // commentTagFunctions address - 测试中使用零地址
+            5044        // functionsSubscriptionId
+        );
         userManager.registerUser(user, "Alice", "bio", "alice@example.com");
         userManager.registerUser(user2, "Bob", "bio", "bob@example.com");
         topicManager.registerTopic("BTC", "desc", "0xBTC", 1000);

@@ -53,7 +53,9 @@ contract RewardTest is Test {
             address(userManager), 
             commentRewardAmount, 
             likeRewardAmount,
-            address(mockVRF)
+            address(mockVRF),
+            address(0), // commentTagFunctions address - 测试中使用零地址
+            5044        // functionsSubscriptionId
         );
         
         // 部署App合约

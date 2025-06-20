@@ -5,7 +5,7 @@ import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
 import {App} from "../src/core/App.sol";
 import {USDC} from "../src/token/USDC.sol";
-import {DeployApp} from "./deployApp.s.sol";
+import {DeployAppScript} from "./deployApp.s.sol";
 
 contract DeployAppWithFakeData is Script {
     App public app;
@@ -20,7 +20,7 @@ contract DeployAppWithFakeData is Script {
 
     function run() external {
         // 部署App
-        DeployApp deployApp = new DeployApp();
+        DeployAppScript deployApp = new DeployAppScript();
         app = deployApp.run();
         // 创建测试数据
         createTestData();

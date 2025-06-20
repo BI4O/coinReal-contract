@@ -11,10 +11,10 @@ import {FunctionsRequest} from "@chainlink/contracts@1.4.0/src/v0.8/functions/v1
  */
 
  /*
- 这个合约已经部署在了sepolia，不需要用foundry来部署
+ 这个合约已经部署在了fuji testnet，不需要用foundry来部署
  而且现在已经有80LINK代币的余额，可以直接用
 
- 地址：0x8a000e20bEc0c5627B5898376A8f6FEfCf79baC9
+ 地址：0x3d4AFaAd35E81C8Da51cf0bfC48f0E71C0BB8b2D
  Owner：0x802f71cBf691D4623374E8ec37e32e26d5f74d87
  只有Owner才可以reset，所以注意app的owner也用这个才行
  */ 
@@ -26,11 +26,11 @@ import {FunctionsRequest} from "@chainlink/contracts@1.4.0/src/v0.8/functions/v1
  */
 contract CommentSentimentAnalyzer is FunctionsClient, ConfirmedOwner {
     
-    // Router address - Hardcoded for sepolia
-    address router = 0xb83E47C2bC239B3bf370bc41e1459A34b41238D0;
+    // Router address - Hardcoded for avax fuji
+    address router = 0xA9d587a00A31A52Ed70D6026794a8FC5E2F5dCb0;
 
-    // donID - Hardcoded for Sepolia
-    bytes32 donID = 0x66756e2d657468657265756d2d7365706f6c69612d3100000000000000000000;
+    // donID - Hardcoded for avax fuji
+    bytes32 donID = 0x66756e2d6176616c616e6368652d66756a692d31000000000000000000000000;
 
     // Gas限制设置
     uint32 gasLimit = 300000;

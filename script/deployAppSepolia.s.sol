@@ -7,10 +7,14 @@ import {UserManager} from "../src/core/UserManager.sol";
 import {TopicManager} from "../src/core/TopicManager.sol";
 import {ActionManager} from "../src/core/ActionManager.sol";
 import {USDC} from "../src/token/USDC.sol";
-import {MockVRF} from "../src/chainlink/MockVRF.sol";
 
-contract DeployAppScript is Script {
-    function run() public returns (App) {
+contract DeployAppSepoliaScript is Script {
+    // Sepolia测试网已部署的合约地址
+    address constant SEPOLIA_VRF_CONTRACT = 0xd5916F5ea735431384A66FF0F0aa09f26A3f8E04;
+    address constant SEPOLIA_FUNCTIONS_CONTRACT = 0x8a000e20bEc0c5627B5898376A8f6FEfCf79baC9;
+    uint64 constant SEPOLIA_FUNCTIONS_SUBSCRIPTION_ID = 5044;
+
+    function run() public {
         vm.startBroadcast();
 
         // 部署基础合约
@@ -29,19 +33,15 @@ contract DeployAppScript is Script {
         );
         console.log("TopicManager deployed at:", address(topicManager));
 
-        // 部署VRF合约（本地测试使用MockVRF）
-        MockVRF vrfContract = new MockVRF();
-        console.log("VRF Contract (Mock) deployed at:", address(vrfContract));
-
-        // 部署ActionManager（带有新功能）
+        // 部署ActionManager（使用Sepolia已部署的Chainlink服务）
         ActionManager actionManager = new ActionManager(
             address(topicManager),
             address(userManager),
             10 * 1e18,  // commentRewardAmount
             5 * 1e18,   // likeRewardAmount
-            address(vrfContract),
-            address(0), // commentTagFunctions - 本地测试暂不设置
-            5044        // functionsSubscriptionId - 默认使用Sepolia订阅ID
+            SEPOLIA_VRF_CONTRACT,
+            SEPOLIA_FUNCTIONS_CONTRACT,
+            SEPOLIA_FUNCTIONS_SUBSCRIPTION_ID
         );
         console.log("ActionManager deployed at:", address(actionManager));
 
@@ -51,7 +51,7 @@ contract DeployAppScript is Script {
             address(userManager),
             address(topicManager),
             address(actionManager),
-            address(vrfContract)
+            SEPOLIA_VRF_CONTRACT
         );
         console.log("App deployed at:", address(app));
 
@@ -64,21 +64,31 @@ contract DeployAppScript is Script {
         app.setActionManager();
 
         // 输出部署信息
-        console.log("\n=== Local Deployment Summary ===");
+        console.log("\n=== Sepolia Deployment Summary ===");
         console.log("USDC:", address(usdc));
         console.log("UserManager:", address(userManager));
         console.log("TopicManager:", address(topicManager));
         console.log("ActionManager:", address(actionManager));
-        console.log("VRF Contract (Mock):", address(vrfContract));
         console.log("App:", address(app));
 
-        console.log("\n=== Local Testing Notes ===");
-        console.log("1. Using MockVRF for local testing");
-        console.log("2. Functions contract not set - use setCommentTagFunctions() if needed");
-        console.log("3. All contracts owned by App contract");
-        console.log("4. Ready for local testing and development");
+        console.log("\n=== Sepolia Chainlink Services ===");
+        console.log("VRF Contract:", SEPOLIA_VRF_CONTRACT);
+        console.log("Functions Contract:", SEPOLIA_FUNCTIONS_CONTRACT);
+        console.log("Functions Subscription ID:", SEPOLIA_FUNCTIONS_SUBSCRIPTION_ID);
+
+        console.log("\n=== Sepolia Configuration Notes ===");
+        console.log("1. Using production Chainlink VRF on Sepolia");
+        console.log("2. Using production Chainlink Functions on Sepolia");
+        console.log("3. VRF and Functions contracts have LINK token funding");
+        console.log("4. All contracts owned by App contract");
+        console.log("5. Ready for Sepolia testnet testing");
+
+        console.log("\n=== Next Steps ===");
+        console.log("1. Verify contracts on Etherscan");
+        console.log("2. Test AI tagging functionality");
+        console.log("3. Test VRF lottery functionality");
+        console.log("4. Monitor LINK token consumption");
 
         vm.stopBroadcast();
-        return app;
     }
-}
+} 

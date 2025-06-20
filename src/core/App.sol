@@ -7,7 +7,7 @@ import "./ActionManager.sol";
 import {USDC} from "../token/USDC.sol";
 import {ProjectToken} from "../token/ProjectToken.sol";
 import {CampaignFactory} from "../token/CampaignFactory.sol";
-import {MockVRF} from "../chainlink/MockVRF.sol";
+import {ICampaignLotteryVRF} from "../chainlink/ICampaignLotteryVRF.sol";
 
 contract App {
     // 使用组合模式而不是继承
@@ -17,7 +17,7 @@ contract App {
     USDC public usdc;
     ProjectToken public projectToken;
     CampaignFactory public campaignFactory;
-    MockVRF public mockVRF;
+    ICampaignLotteryVRF public vrfContract;
     
     // 权限控制
     address public owner;
@@ -37,14 +37,14 @@ contract App {
         address _userManager,
         address _topicManager,
         address _actionManager,
-        address _mockVRFAddr
+        address _vrfContractAddr
     ) {
         owner = msg.sender;
         usdc = USDC(_usdcAddr);
         userManager = UserManager(_userManager);
         topicManager = TopicManager(_topicManager);
         actionManager = ActionManager(_actionManager);
-        mockVRF = MockVRF(_mockVRFAddr);
+        vrfContract = ICampaignLotteryVRF(_vrfContractAddr);
     }
     
     // 设置ActionManager引用（需要在转移owner后调用）
@@ -223,5 +223,114 @@ contract App {
         bool distributed
     ) {
         return topicManager.getRewardDistributionInfo(_campaignId);
+    }
+
+    // ========== AI 标签功能 ==========
+
+    /**
+     * @notice 为评论添加AI情感分析标签
+     * @param commentId 评论ID
+     * @return success 请求是否成功发送
+     */
+    function addCommentAITag(uint commentId) public returns (bool) {
+        return actionManager.addCommentAITag(commentId);
+    }
+
+    /**
+     * @notice 检查评论是否已完成AI情感分析
+     * @param commentId 评论ID
+     * @return analyzed 是否已分析
+     */
+    function isCommentTagAnalyzed(uint commentId) public view returns (bool) {
+        return actionManager.isCommentTagAnalyzed(commentId);
+    }
+
+    /**
+     * @notice 获取评论的AI情感标签
+     * @param commentId 评论ID
+     * @return tag 情感标签（POS/NEG/NEU）
+     */
+    function getCommentAITag(uint commentId) public view returns (string memory) {
+        return actionManager.getCommentAITag(commentId);
+    }
+
+    /**
+     * @notice 检查评论是否需要添加AI标签
+     * @param commentId 评论ID
+     * @return needsTag 是否需要添加标签
+     */
+    function checkCommentTagStatus(uint commentId) public view returns (bool) {
+        return actionManager.checkCommentTagStatus(commentId);
+    }
+
+    // ========== Chainlink Automation 功能 ==========
+
+    /**
+     * @notice 检查活动是否需要执行抽奖
+     * @param campaignId 活动ID
+     * @return needsLottery 是否需要执行抽奖
+     */
+    function checkCampaignLotteryNeeded(uint256 campaignId) public view returns (bool) {
+        return actionManager.checkCampaignLotteryNeeded(campaignId);
+    }
+
+    /**
+     * @notice 执行活动抽奖
+     * @param campaignId 活动ID
+     * @return success 操作是否成功
+     */
+    function performCampaignLottery(uint256 campaignId) public returns (bool) {
+        return actionManager.performCampaignLottery(campaignId);
+    }
+
+    /**
+     * @notice 检查指定范围内需要添加标签的评论
+     * @param startId 起始评论ID
+     * @param endId 结束评论ID
+     * @return commentIds 需要添加标签的评论ID数组
+     */
+    function checkNewCommentsForTagging(uint256 startId, uint256 endId) public view returns (uint256[] memory) {
+        return actionManager.checkNewCommentsForTagging(startId, endId);
+    }
+
+    /**
+     * @notice 批量为评论添加AI标签
+     * @param commentIds 评论ID数组
+     * @return successCount 成功添加标签请求的评论数量
+     */
+    function performBatchCommentTagging(uint256[] memory commentIds) public returns (uint256) {
+        return actionManager.performBatchCommentTagging(commentIds);
+    }
+
+    /**
+     * @notice 获取评论总数（用于Automation批处理）
+     * @return count 当前评论总数
+     */
+    function getCommentCounter() public view returns (uint256) {
+        return actionManager.getCommentCounter();
+    }
+
+    // ========== 查询预期奖励和奖池信息 ==========
+
+    /**
+     * @notice 获取用户预期奖励
+     * @param campaignId 活动ID
+     * @param user 用户地址
+     * @return worstCase 最差情况奖励 [USDC, ProjectToken]
+     * @return bestCase 最好情况奖励 [USDC, ProjectToken]
+     */
+    function getExpectedReward(uint256 campaignId, address user) public view returns (uint[2] memory, uint[2] memory) {
+        return actionManager.getExpectedReward(campaignId, user);
+    }
+
+    /**
+     * @notice 获取活动奖池信息
+     * @param campaignId 活动ID
+     * @return qualityPool 质量评论者奖池 [人数, USDC, ProjectToken]
+     * @return lotteryPool 点赞抽奖奖池 [人数, USDC, ProjectToken]
+     * @return campaignPool CampaignToken奖池 [总参与者, USDC, ProjectToken]
+     */
+    function getFundPoolInfo(uint256 campaignId) public view returns (uint[3] memory, uint[3] memory, uint[3] memory) {
+        return actionManager.getFundPoolInfo(campaignId);
     }
 }
