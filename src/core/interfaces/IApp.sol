@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "./UserManager.sol";
-import "./TopicManager.sol";
-import "./ActionManager.sol";
-import {USDC} from "../token/USDC.sol";
-import {ProjectToken} from "../token/ProjectToken.sol";
-import {CampaignFactory} from "../token/CampaignFactory.sol";
-import {ICampaignLotteryVRF} from "../chainlink/ICampaignLotteryVRF.sol";
+import "./IUserManager.sol";
+import "./ITopicManager.sol";
+import "./IActionManager.sol";
+import "../../token/interfaces/IUSDC.sol";
+import "../../token/interfaces/IProjectToken.sol";
+import "../../token/interfaces/ICampaignFactory.sol";
+import "../../chainlink/ICampaignLotteryVRF.sol";
 
 /**
  * @title IApp
@@ -62,8 +62,8 @@ interface IApp {
     function getGlobalLikesCount() external view returns (uint);
     
     // 查询功能 - 详情
-    function getComment(uint _commentId) external view returns (ActionManager.Comment memory);
-    function getLike(uint _likeId) external view returns (ActionManager.Like memory);
+    function getComment(uint _commentId) external view returns (IActionManager.Comment memory);
+    function getLike(uint _likeId) external view returns (IActionManager.Like memory);
     function getCommentLikeCount(uint _commentId) external view returns (uint);
     function getCommentTags(uint _commentId) external view returns (string[] memory);
     

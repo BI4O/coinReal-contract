@@ -468,7 +468,7 @@ contract ActionManager {
         
         // 平分奖励
         if (validWinners > 0) {
-            USDC usdc = USDC(topicManager.usdc());
+        USDC usdc = USDC(topicManager.usdc());
             uint rewardPerWinner = lotteryForLikerFeePool[_campaignId] / validWinners;
             for (uint i = 0; i < validWinners; i++) {
                 usdc.transfer(finalWinners[i], rewardPerWinner);
