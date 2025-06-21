@@ -1,0 +1,370 @@
+[⠊] Compiling...
+[⠘] Compiling 1 files with Solc 0.8.25
+[⠃] Solc 0.8.25 finished in 64.08s
+Compiler run successful!
+Warning: Detected artifacts built from source files that no longer exist. Run `forge clean` to make sure bui
+lds are in sync with project files.
+ - /Users/bi4o/Desktop/珠海/chainlink/CoinReal_0610/script/deployAppWithNewFeatures.s.sol
+Script ran successfully.
+
+== Logs ==
+  === Starting deployment with fake data ===
+  USDC deployed at: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+  UserManager deployed at: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+  TopicManager deployed at: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+  VRF Contract (Mock) deployed at: 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+  ActionManager deployed at: 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+  App deployed at: 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+  
+=== Local Deployment Summary ===
+  USDC: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+  UserManager: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+  TopicManager: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+  ActionManager: 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+  VRF Contract (Mock): 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+  App: 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+  
+=== Local Testing Notes ===
+  1. Using MockVRF for local testing
+  2. Functions contract not set - use setCommentTagFunctions() if needed
+  3. All contracts owned by App contract
+  4. Ready for local testing and development
+  App deployed successfully
+  Creating users...
+  Users created successfully
+  Creating topics...
+  Topics created successfully
+  Creating campaigns...
+  Campaigns created successfully
+  Creating interactions...
+  Interactions created successfully
+  === Deployment with fake data completed ===
+  App contract address: 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+
+## Setting up 1 EVM.
+
+==========================
+
+Chain 31337
+
+Estimated gas price: 2.000000001 gwei
+
+Estimated total gas used for script: 44478482
+
+Estimated amount required: 0.088956964044478482 ETH
+
+==========================
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xe0a4857b2b41dfb5e95d7031f872273bffa1315645a2eecc5b5dc790b15b887e
+Contract Address: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+Block: 1
+Paid: 0.000547452000547452 ETH (547452 gas * 1.000000001 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xb39dfa43a42e7a7c4f9b9944736bbffe87b537d31307a1d9b626cdd20730260c
+Contract Address: 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512
+Block: 2
+Paid: 0.000806438826171264 ETH (916864 gas * 0.879562101 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x544acdd77748bc460aa25fdd352d3afcd1b2b1f66de88dfcec030c85ab502916
+Contract Address: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+Block: 3
+Paid: 0.003439144131277806 ETH (4429962 gas * 0.776337163 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xf05f141473729c827f61ed7bc066339c93955fbd6a22927856f270a98971f977
+Contract Address: 0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9
+Block: 4
+Paid: 0.000517193366875938 ETH (730546 gas * 0.707954553 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xb6efbe65f5aeccf5790758c9ee4d069d65d5c408c91c9d4d2b37b9e9763b8479
+Contract Address: 0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9
+Block: 5
+Paid: 0.003825697905290115 ETH (6133185 gas * 0.623770179 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x13d89a135aa2537bba66b402065f4a6e5b97ffd950d0e34c58eed5e7c0420cb0
+Contract Address: 0x5FC8d32690cc91D4c39d9d3abcBD16989F875707
+Block: 6
+Paid: 0.00139522362058406 ETH (2415220 gas * 0.577679723 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xf45da092dcb5b6a1090ce13300f33508e405a708eaa5e752b5d7b39d95439c6f
+Block: 7
+Paid: 0.000013830783348634 ETH (26747 gas * 0.517096622 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x0c497476551f1adf5987c72eb0a2f9a7cb11f0a4d7844a8111e7b9da3623c466
+Block: 8
+Paid: 0.000012134888139213 ETH (26813 gas * 0.452574801 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x653f3bf07af2b53533927ec802ebec45299deaa94fd23e5c2b157a322d1020e5
+Block: 9
+Paid: 0.000010638563273208 ETH (26858 gas * 0.396104076 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xe78c59dff79984908770f6857e29ebe1a28af664bf46268709f099dede99ef8c
+Block: 10
+Paid: 0.000019203976520468 ETH (55394 gas * 0.346679722 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x547bf8848445bbe9fca7d030f0a438c077a4941128d91bd27f41995f49f88942
+Block: 11
+Paid: 0.000051242534893276 ETH (168836 gas * 0.303504791 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x18ada8616c245645fdbcc9a359fa35692454590dc63a40eac10412b15fb0fde4
+Block: 12
+Paid: 0.000045650905171536 ETH (171624 gas * 0.265993714 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xdc79613fc9bb268efbc974dceb29eb16e697c45196aed50bc0da3db2c1e26e94
+Block: 13
+Paid: 0.0000400098321282 ETH (171624 gas * 0.233124925 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xb2c99891cb266d853955655be9af630aaa38023383bb52ca46f56a09c9d0a27a
+Block: 14
+Paid: 0.0000350535661719 ETH (171564 gas * 0.204317725 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x58add418549cdb08bfa2275f304b59a900c07135a2bb2086b41d286addbc13eb
+Block: 15
+Paid: 0.000030715540057944 ETH (171528 gas * 0.179070123 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x1cfff6cf5e603a5a6525c33744594e7b0a9f0128cdb8c753759188daa64574b7
+Block: 16
+Paid: 0.00002695955190138 ETH (171780 gas * 0.156942321 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xbe935d459dced1133ada96769f8b9fea327af2995bbdae517e92cf820f46a496
+Block: 17
+Paid: 0.00002362820054532 ETH (171780 gas * 0.137549194 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x478c2a39fd920316fceab5be239f7f3a68bea6f268cc6a1bc4d8f72522d7df12
+Block: 18
+Paid: 0.000020688246534564 ETH (171612 gas * 0.120552447 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x98c6399f797705db61769ff08db85a9773754dcbeba309fadfb07656eee00901
+Block: 19
+Paid: 0.000027085496726664 ETH (256356 gas * 0.105655794 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x37faf18bc6553bf1904d049d20f118c36c666256e0f8c5b17d7473248399b738
+Block: 20
+Paid: 0.000025861384480848 ETH (279056 gas * 0.092674533 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xa8fa50a4238c2447bbd292f019464ae97545dcaedeaa7381563df6d75390b537
+Block: 21
+Paid: 0.000022688851511824 ETH (279056 gas * 0.081305729 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x04e50138a729075bab375fda88a55bfc23f47c316bb0b3d2041db3b8e97b7eea
+Block: 22
+Paid: 0.000019896947551432 ETH (278936 gas * 0.071331587 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x740c4838fdc1280d3ba096e0c978b8cde4a17cdd65ab6255d5389852a94b5047
+Block: 23
+Paid: 0.000017456830003756 ETH (278948 gas * 0.062580947 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x4bcdd45a3ce880e246a83c83ca6854e1cfb31c6e5f99228bf2257dc25d4e178b
+Block: 24
+Paid: 0.000023743973164395 ETH (432465 gas * 0.054903803 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x8b6013881b79af11156cbae2627091bd16f3bf1cbcb3fcdff2378c74e1e5f23f
+Block: 25
+Paid: 0.000023878781128035 ETH (495013 gas * 0.048238695 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xbf2ddb9aff17593ff6fd56ed00a69a29ae54a9510621ee7a2f5af20bb3caee52
+Block: 26
+Paid: 0.000025343566680135 ETH (597615 gas * 0.042407849 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x2797aa440d5bc66cdc535944f873b3a804ee4086189bd68d4217062313ffae5f
+Block: 27
+Paid: 0.000022944452494275 ETH (614835 gas * 0.037318065 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xe2ac6b142f20c6e5b16ad8caa4183dd653bb92c5b26b6527b322cd8352443846
+Block: 28
+Paid: 0.000021591160418625 ETH (657375 gas * 0.032844511 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xbdf9fb29144e8184fed2efe926e937d912cb6918f6990d74edd69651a6e55e6b
+Block: 29
+Paid: 0.000018514990970886 ETH (640239 gas * 0.028918874 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x0a87c7f2a89c3968103b266b69825be7832c56b52c43be69f9b6dfa2aeb0d6ee
+Block: 30
+Paid: 0.00001463165278211 ETH (574730 gas * 0.025458307 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x57a06e24ab963b40382e26bbc82b6ecd33d9fa84f3db42eb1c8a3f93429f0830
+Block: 31
+Paid: 0.0000124951891624 ETH (557872 gas * 0.02239795 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x29966eae40ff4bff5402bfec84c52676ea51c75be1533d53e6fb9ed0255f62b7
+Block: 32
+Paid: 0.000011043059134835 ETH (560495 gas * 0.019702333 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xd1c9a9bb3a765ea6831d3c50a5612011be4f05b1f5130960b63dc8a2ebd51f29
+Block: 33
+Paid: 0.000009714048666861 ETH (560483 gas * 0.017331567 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x77163310b1e250616e87f3cb72f98406d9a8d269735450f60478ab8f638e9968
+Block: 34
+Paid: 0.000008543334644136 ETH (560363 gas * 0.015246072 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xbeb64e1aed3ed61ebe1f2a53889b86d24a9fab6284de7e1a96208dbc7484c50f
+Block: 35
+Paid: 0.00000751627848598 ETH (560435 gas * 0.013411508 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xaa0f46e7a46ebea1dfecdcc56f2db9c182c7928dfd708e85357498420ed462f5
+Block: 36
+Paid: 0.000005845244223936 ETH (495456 gas * 0.011797706 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x19a7cb0a5eca5b99fe28c2cfb586b05c8349c353afdb9f1816cf10ce5bedffd1
+Block: 37
+Paid: 0.000005640008174752 ETH (543788 gas * 0.010371704 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xa1258e32e753b607a5b00ff9d92c31df54706a266a008b15ff7abe5c4c409087
+Block: 38
+Paid: 0.000004986108010296 ETH (546588 gas * 0.009122242 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x7e649114cc4d72811d6abd456a0bc90c70f2233000a6289fac9a0309b2136417
+Block: 39
+Paid: 0.000004721556577545 ETH (588465 gas * 0.008023513 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x6b8ea2204ac7319741002e5b270ad405a8fc1ad051c47e2983dd7243d39237b6
+Block: 40
+Paid: 0.000004033791762165 ETH (571365 gas * 0.007059921 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x8ccef2518deebb1752c6bf9385b418923b39bc274f188c9ca3e1c43d14299988
+Block: 41
+Paid: 0.00000382423418789 ETH (615715 gas * 0.006211046 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x9b0bece821ecb38658d25cf8099e6f4db7ceb3401c806dfee1203b0aeaf28e0e
+Block: 42
+Paid: 0.00000332072807631 ETH (607465 gas * 0.005466534 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xb0cac32627bbf020b3db7c4dd5cebb2144a6e6e167a5f64919503bdfb9c56e85
+Block: 43
+Paid: 0.000002983065127915 ETH (620065 gas * 0.004810891 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x085b0f8fb28cb3bdd1bb9c67d097992f55c09c57794f07694719f9309c1e7143
+Block: 44
+Paid: 0.000002231374799385 ETH (526965 gas * 0.004234389 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x3df13384c995528c2a7c8720a88be957fb0c634bb33dee53b4ffc990fcd02c5a
+Block: 45
+Paid: 0.00000203970486179 ETH (547765 gas * 0.003723686 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xef6510aa4140314d783f154b1f0d429c695679549c3bd562c05a9cf3661618ce
+Block: 46
+Paid: 0.000001794052526595 ETH (547765 gas * 0.003275223 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0x1b66a976744ae54d497082317598196a9877d4d085bd55c29376f9f2bf1906d8
+Block: 47
+Paid: 0.000001577985526815 ETH (547765 gas * 0.002880771 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xea90e5aaa5e037c0acc0288fa2d771c01a3f1d94bc01595c9127e1a2802cbe0a
+Block: 48
+Paid: 0.000001387940651125 ETH (547765 gas * 0.002533825 gwei)
+
+
+##### anvil-hardhat
+✅  [Success] Hash: 0xf16c797396f9251caa7e0c3daa65d84229f2f24f4d5daa047142658b75933f29
+Block: 49
+Paid: 0.000001220456522352 ETH (547618 gas * 0.002228664 gwei)
+
+✅ Sequence #1 on anvil-hardhat | Total Paid: 0.011219462688468346 ETH (32718211 gas * avg 0.178209845 gwei)
+
+
+
+==========================
+
+ONCHAIN EXECUTION COMPLETE & SUCCESSFUL.
+
+Transactions saved to: /Users/bi4o/Desktop/珠海/chainlink/CoinReal_0610/broadcast/deployAppWithFakeData.s.so
+l/31337/run-latest.json
+
+Sensitive values saved to: /Users/bi4o/Desktop/珠海/chainlink/CoinReal_0610/cache/deployAppWithFakeData.s.so
+l/31337/run-latest.json
+
